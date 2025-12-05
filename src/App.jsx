@@ -103,6 +103,44 @@ export default function App() {
     r.readAsDataURL(file);
   };
 
+  const handleExportData = () => {
+    const exportData = {
+        version: 1,
+        timestamp: new Date().toISOString(),
+        shortcuts: shortcuts.map(({id, ...rest}) => rest), // remove ID
+        labels: Object.entries(labelColors).map(([name, color_class]) => ({name, color_class}))
+    };
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData));
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", `backup_sqlite_${new Date().toISOString().slice(0,10)}.json`);
+    document.body.appendChild(downloadAnchorNode);
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+  };
+
+  const handleImportData = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+        try {
+            const importedData = JSON.parse(event.target.result);
+            await fetch('/api/import', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(importedData)
+            });
+            alert("Import thành công!");
+            await fetchData();
+        } catch (err) {
+            alert("Lỗi import: " + err.message);
+        }
+        e.target.value = null;
+    };
+    reader.readAsText(file);
+  };
+
   const handleLogin = (e) => {
     e.preventDefault();
     if (loginCreds.username === 'admin' && loginCreds.password === 'miniappadmin') { setIsAdmin(true); setShowLoginModal(false); setLoginCreds({username:'',password:''}); }
@@ -180,8 +218,12 @@ export default function App() {
              </button>
              {isAdmin ? (
                 <div className={`flex items-center gap-2 px-2 py-1 rounded-full border shadow-lg ${modalClass}`}>
-                   <button onClick={() => { resetForm(); setShowAddModal(true); }} className="p-1.5 bg-[#0F2F55] text-white rounded-full hover:scale-110"><Plus size={16}/></button>
-                   <button onClick={() => setIsAdmin(false)} className="p-1.5 hover:bg-red-100 dark:hover:bg-red-900 rounded-full text-red-500"><LogOut size={16}/></button>
+                   <button onClick={() => { resetForm(); setShowAddModal(true); }} className="p-1.5 bg-[#0F2F55] text-white rounded-full hover:scale-110" title="Thêm mới"><Plus size={16}/></button>
+                   <button onClick={handleExportData} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full text-blue-500" title="Xuất dữ liệu"><Download size={16}/></button>
+                   <button onClick={() => importInputRef.current?.click()} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full text-green-500" title="Nhập dữ liệu"><FileUp size={16}/></button>
+                   <input type="file" ref={importInputRef} className="hidden" accept=".json" onChange={handleImportData} />
+                   <div className="w-px h-4 bg-gray-300 dark:bg-gray-600 mx-1"></div>
+                   <button onClick={() => setIsAdmin(false)} className="p-1.5 hover:bg-red-100 dark:hover:bg-red-900 rounded-full text-red-500" title="Đăng xuất"><LogOut size={16}/></button>
                 </div>
              ) : (
                 <button onClick={() => setShowLoginModal(true)} className={`p-2 rounded-full border shadow-lg hover:scale-105 transition-transform ${inputClass}`}>
