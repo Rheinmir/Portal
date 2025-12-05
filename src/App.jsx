@@ -60,7 +60,7 @@ export default function App(){
           {showFilterPanel&&(
             <div className={`pointer-events-auto w-full max-w-5xl mx-auto rounded-2xl p-3 shadow-lg flex flex-col gap-2 border ${modalClass} bg-opacity-95 backdrop-blur-md`}>
               <div className="flex flex-wrap gap-2"><span className="text-xs font-bold uppercase opacity-60">Nhóm:</span><button onClick={()=>setActiveParentFilter(null)} className={`px-3 py-1 text-xs rounded-full border ${!activeParentFilter?'bg-[#0A1A2F] text-white':''}`}>All</button>{uniqueParents.map(l=><button key={l} onClick={()=>setActiveParentFilter(l)} className={`px-3 py-1 text-xs rounded-full border ${activeParentFilter===l?'ring-2 ring-[#009FB8]':''}`} style={{background:labelColors[l],color:getContrastYIQ(labelColors[l])}}>{l}</button>)}</div>
-              {uniqueChildren.length>0&&<div className="flex flex-wrap gap-2 pt-2 border-t border-gray-500/20"><span className="text-xs font-bold opacity-60">Tag:</span>{uniqueChildren.map(l=><button key={l} onClick={()=>setActiveChildFilter(activeChildFilter===l?null:l)} className={`px-2 py-0.5 text-[10px] rounded border ${activeChildFilter===l?'bg-[#009FB8] text-white':''}`} style={activeChildFilter===l&&labelColors[l]?{background:labelColors[l],borderColor:labelColors[l],color:getContrastYIQ(labelColors[l])}:{}}>{l}</button>)}</div>}
+              {uniqueChildren.length>0&&<div className="flex flex-wrap gap-2 pt-2 border-t border-gray-500/20"><span className="text-xs font-bold opacity-60">Tag:</span>{uniqueChildren.map(l=><button key={l} onClick={()=>setActiveChildFilter(activeChildFilter===l?null:l)} className={`px-2 py-0.5 text-[10px] rounded-full border ${activeChildFilter===l?'bg-[#009FB8] text-white':''}`} style={activeChildFilter===l&&labelColors[l]?{background:labelColors[l],borderColor:labelColors[l],color:getContrastYIQ(labelColors[l])}:{}}>{l}</button>)}</div>}
             </div>
           )}
         </div>
@@ -73,12 +73,12 @@ export default function App(){
             <span className="text-xs text-center truncate w-full px-1 leading-tight font-light" style={{textShadow:bgImage?'0 1px 2px rgba(0,0,0,0.5)':'none'}}>{i.name}</span>
             <div className="flex flex-wrap justify-center gap-1 mt-1 px-1">
               {i.parent_label&&<span className="text-[8px] px-1 py-0.5 rounded-full text-white truncate max-w-[60px] shadow-sm mb-0.5" style={{background:labelColors[i.parent_label]||'#9CA3AF',color:getContrastYIQ(labelColors[i.parent_label]||'#9CA3AF')}}>{i.parent_label}</span>}
-              {(i.child_label||'').split(',').filter(Boolean).map(t=><span key={t} className={`text-[8px] px-1 py-0.5 rounded border truncate max-w-[60px] bg-white/50 backdrop-blur-sm ${darkMode?'border-gray-600':'border-gray-300'}`} style={{borderColor:labelColors[t?.trim()],color:labelColors[t?.trim()]||(darkMode?'#ddd':'#333')}}>{t.trim()}</span>)}
+              {(i.child_label||'').split(',').filter(Boolean).map(t=><span key={t} className={`text-[8px] px-1 py-0.5 rounded-full border truncate max-w-[60px] bg-white/50 backdrop-blur-sm ${darkMode?'border-gray-600':'border-gray-300'}`} style={{borderColor:labelColors[t?.trim()],color:labelColors[t?.trim()]||(darkMode?'#ddd':'#333')}}>{t.trim()}</span>)}
             </div>
             {i.isLocal&&<div className="absolute bottom-8 right-2 bg-blue-500/80 text-white text-[8px] px-1 rounded">LOCAL</div>}
           </div>))}
           <div className="flex flex-col items-center w-full max-w-[100px] cursor-pointer group" onClick={()=>{resetForm();setShowAddModal(true)}}>
-            <div className={`w-16 h-16 rounded-2xl border-2 border-dashed flex items-center justify-center transition-all mb-2 ${darkMode?'border-gray-600 bg-gray-800/50':'border-gray-300 bg-white/50 hover:border-[#009FB8]'}`}><Plus size={24} className="opacity-50"/></div>
+            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all mb-2 backdrop-blur-sm bg-white/20 dark:bg-black/20 hover:bg-green-500/20`}><Plus size={24} className="opacity-50"/></div>
             <span className="text-xs font-medium opacity-50">Thêm App</span>
           </div>
         </div></div>
