@@ -1,7 +1,9 @@
 version: '3.8'
+
 services:
   app:
     build: .
+    container_name: shortcut-manager-app
     ports:
       - "5464:5464"
     volumes:
