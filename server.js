@@ -15,7 +15,6 @@ const ensureColumn = (table, columnDef) => {
     }
   } catch (e) { console.error(`Migration check failed for ${table}.${col}`, e); }
 };
-// Shortcuts migrations
 ensureColumn("shortcuts", "tenant TEXT NOT NULL DEFAULT 'default'");
 ensureColumn("shortcuts", "icon_64 TEXT");
 ensureColumn("shortcuts", "icon_128 TEXT");
@@ -25,10 +24,8 @@ ensureColumn("shortcuts", "child_label TEXT");
 ensureColumn("shortcuts", "favorite INTEGER DEFAULT 0");
 ensureColumn("shortcuts", "clicks INTEGER DEFAULT 0");
 ensureColumn("shortcuts", "created_at DATETIME DEFAULT CURRENT_TIMESTAMP");
-// label_colors migration
 ensureColumn("label_colors", "tenant TEXT NOT NULL DEFAULT 'default'");
 ensureColumn("label_colors", "color_class TEXT");
-// admins migration
 ensureColumn("admins", "role TEXT NOT NULL DEFAULT 'admin'");
 console.log("✔️ Auto-migration finished");
 
