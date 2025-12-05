@@ -3,6 +3,35 @@ const __dirname=path.dirname(fileURLToPath(import.meta.url)),app=express(),PORT=
 app.use(cors());app.use(express.json({limit:'50mb'}));if(fs.existsSync(path.join(__dirname,'dist')))app.use(express.static(path.join(__dirname,'dist')));
 [dataDir,backupDir].forEach(d=>{if(!fs.existsSync(d))fs.mkdirSync(d,{recursive:true})});
 const db=new Database(dbPath);db.pragma('journal_mode = WAL');
+
+// --- AUTO MIGRATION FOR OLD DATABASES ---
+const ensureColumn = (table, columnDef) => {
+  const [col] = columnDef.split(" ");
+  try {
+    const exists = db.prepare(`PRAGMA table_info(${table})`).all().some(c => c.name === col);
+    if (!exists) {
+      console.log(`⚠️ Adding missing column '${col}' to table '${table}'`);
+      db.prepare(`ALTER TABLE ${table} ADD COLUMN ${columnDef}`).run();
+    }
+  } catch (e) { console.error(`Migration check failed for ${table}.${col}`, e); }
+};
+// Shortcuts migrations
+ensureColumn("shortcuts", "tenant TEXT NOT NULL DEFAULT 'default'");
+ensureColumn("shortcuts", "icon_64 TEXT");
+ensureColumn("shortcuts", "icon_128 TEXT");
+ensureColumn("shortcuts", "icon_256 TEXT");
+ensureColumn("shortcuts", "parent_label TEXT");
+ensureColumn("shortcuts", "child_label TEXT");
+ensureColumn("shortcuts", "favorite INTEGER DEFAULT 0");
+ensureColumn("shortcuts", "clicks INTEGER DEFAULT 0");
+ensureColumn("shortcuts", "created_at DATETIME DEFAULT CURRENT_TIMESTAMP");
+// label_colors migration
+ensureColumn("label_colors", "tenant TEXT NOT NULL DEFAULT 'default'");
+ensureColumn("label_colors", "color_class TEXT");
+// admins migration
+ensureColumn("admins", "role TEXT NOT NULL DEFAULT 'admin'");
+console.log("✔️ Auto-migration finished");
+
 db.exec(`CREATE TABLE IF NOT EXISTS shortcuts(id INTEGER PRIMARY KEY AUTOINCREMENT,tenant TEXT NOT NULL DEFAULT 'default',name TEXT NOT NULL,url TEXT NOT NULL,icon_url TEXT,icon_64 TEXT,icon_128 TEXT,icon_256 TEXT,parent_label TEXT,child_label TEXT,favorite INTEGER DEFAULT 0,clicks INTEGER DEFAULT 0,created_at DATETIME DEFAULT CURRENT_TIMESTAMP);CREATE TABLE IF NOT EXISTS label_colors(name TEXT NOT NULL,tenant TEXT NOT NULL DEFAULT 'default',color_class TEXT,PRIMARY KEY(name,tenant));CREATE TABLE IF NOT EXISTS admins(username TEXT PRIMARY KEY,password_hash TEXT NOT NULL,role TEXT NOT NULL DEFAULT 'admin');CREATE TABLE IF NOT EXISTS app_config(key TEXT PRIMARY KEY,value TEXT);CREATE TABLE IF NOT EXISTS click_logs(id INTEGER PRIMARY KEY AUTOINCREMENT,shortcut_id INTEGER,clicked_at DATETIME DEFAULT CURRENT_TIMESTAMP);CREATE UNIQUE INDEX IF NOT EXISTS idx_shortcuts_name_url_tenant ON shortcuts(name,url,tenant);`);
 if(!db.prepare('SELECT COUNT(*) as c FROM admins').get().c)db.prepare('INSERT INTO admins(username,password_hash,role)VALUES(?,?,?)').run('admin',crypto.createHash('sha256').update('miniappadmin').digest('hex'),'superadmin');
 const normalizeTenant=t=>(t&&typeof t==='string'?t.trim():'')||'default';
