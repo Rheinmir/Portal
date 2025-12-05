@@ -77,7 +77,7 @@ export default function App(){
             </div>
           </div>))}
           <div className="flex flex-col items-center w-full max-w-[100px] cursor-pointer group" onClick={()=>{resetForm();setShowAddModal(true)}}>
-            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all mb-2 backdrop-blur-sm bg-white/20 dark:bg-black/20 hover:bg-green-500/20`}><Plus size={24} className="opacity-50 font-light"/></div>
+            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all mb-2 backdrop-blur-sm bg-white/10 dark:bg-black/10 hover:bg-emerald-500/10`}><Plus size={24} className="opacity-50 font-light"/></div>
             <span className="text-xs font-light opacity-50">Thêm App</span>
           </div>
         </div></div>
@@ -112,11 +112,11 @@ export default function App(){
               <div className="flex justify-between items-center mb-6"><div className="flex items-center gap-4"><h3 className="font-bold text-xl flex items-center gap-2"><ChartIcon className="text-orange-500"/> Phân tích</h3><button onClick={handleExportStats} className="text-xs flex items-center gap-1 text-blue-500 hover:underline bg-blue-500/10 px-2 py-1 rounded"><Download size={12}/> Xuất CSV đầy đủ</button></div><button onClick={()=>setShowInsightsModal(false)}><X size={24}/></button></div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6"><div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20"><p className="text-sm opacity-70">Tổng Click</p><p className="text-3xl font-bold text-blue-500">{insightsData.totalClicks}</p></div><div className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/20"><p className="text-sm opacity-70">Top 1 App</p><p className="text-xl font-bold text-purple-500 truncate">{insightsData.topApps[0]?.name||'N/A'}</p></div></div>
               <div className="space-y-6">
-                <div className="p-4 rounded-xl border border-gray-500/20"><h4 className="text-sm font-bold mb-4 opacity-80">Top 5 Ứng Dụng (Thống kê đơn giản)</h4>
-                  <div className="flex flex-col gap-2">{insightsData.topApps.map((a,i)=>(<div key={i} className="flex items-center gap-2"><div className="w-24 truncate text-xs opacity-80">{a.name}</div><div className="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden"><div className="h-full bg-[#009FB8]" style={{width:`${(a.count/Math.max(...insightsData.topApps.map(x=>x.count),1))*100}%`}}/></div><div className="text-xs font-bold w-8 text-right">{a.count}</div></div>))}</div>
+                <div className="p-4 rounded-xl border border-gray-500/20"><h4 className="text-sm font-bold mb-4 opacity-80">Top 10 Ứng Dụng</h4>
+                  <div className="flex flex-col gap-2">{insightsData.topApps.map((a,i)=>(<div key={i} className="flex items-center gap-2"><div className="w-32 truncate text-xs font-medium opacity-80">{a.name}</div><div className="flex-1 h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-blue-400 to-purple-500" style={{width:`${(a.count/Math.max(...insightsData.topApps.map(x=>x.count),1))*100}%`}}/></div><div className="text-xs font-bold w-10 text-right">{a.count}</div></div>))}</div>
                 </div>
-                <div className="p-4 rounded-xl border border-gray-500/20"><h4 className="text-sm font-bold mb-4 opacity-80">Hoạt động gần đây (7 ngày)</h4>
-                   <div className="flex items-end gap-1 h-32">{insightsData.timeline.map((d,i)=>(<div key={i} className="flex-1 flex flex-col items-center gap-1"><div className="w-full bg-blue-400/50 rounded-t" style={{height:`${Math.max((d.count/Math.max(...insightsData.timeline.map(x=>x.count),1))*100, 5)}%`}}></div><div className="text-[8px] opacity-60 -rotate-45 mt-2">{d.d.slice(5)}</div></div>))}</div>
+                <div className="p-4 rounded-xl border border-gray-500/20"><h4 className="text-sm font-bold mb-4 opacity-80">Hoạt động (7 ngày qua)</h4>
+                   <div className="flex items-end gap-1 h-32">{insightsData.timeline.map((d,i)=>(<div key={i} className="flex-1 flex flex-col items-center gap-1 group"><div className="w-full bg-emerald-400/60 rounded-t hover:bg-emerald-500 transition-all" style={{height:`${Math.max((d.count/Math.max(...insightsData.timeline.map(x=>x.count),1))*100, 5)}%`}} title={`${d.d}: ${d.count} clicks`}></div><div className="text-[9px] opacity-60 -rotate-45 mt-2">{d.d.slice(5)}</div></div>))}</div>
                 </div>
               </div>
             </div>
