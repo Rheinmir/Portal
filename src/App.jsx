@@ -1,438 +1,124 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Save, Trash2, Plus, Search, Activity, Copy, Check, Settings, LogOut, X, Filter, Tag, Upload, Download, FileUp, Pencil, Star, Moon, Sun, LayoutGrid, List, Image as ImageIcon, RotateCcw, BarChart as ChartIcon, Palette } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line } from 'recharts';
+import React,{useState,useEffect,useRef,useMemo}from'react';import{Save,Trash2,Plus,Search,Activity,Copy,Check,Settings,LogOut,X,Filter,Tag,Upload,Download,FileUp,Pencil,Star,Moon,Sun,LayoutGrid,List,Image as ImageIcon,RotateCcw,BarChart as ChartIcon,Palette,Type}from'lucide-react';import{BarChart,Bar,XAxis,YAxis,Tooltip,ResponsiveContainer,CartesianGrid,LineChart,Line}from'recharts';
+const COLOR_PRESETS=['#0A1A2F','#009FB8','#6D28D9','#BE123C','#059669','#C2410C','#475569'];const DEFAULT_LIGHT_TEXT='#0A1A2F',DEFAULT_DARK_TEXT='#E2E8F0';
+const getGradientStyle=h=>h?{background:`linear-gradient(135deg,${h},${h}dd)`}:{};
+const getContrastYIQ=(hex)=>{if(!hex)return'#fff';const h=hex.replace('#','');const r=parseInt(h.substr(0,2),16),g=parseInt(h.substr(2,2),16),b=parseInt(h.substr(4,2),16);return(((r*299)+(g*587)+(b*114))/1000)>=128?'#000':'#fff'};
+const normalizeTenant=t=>(t&&typeof t==='string'?t.trim():'')||'default';
 
-const COLOR_PRESETS = ['#0A1A2F', '#009FB8', '#6D28D9', '#BE123C', '#059669', '#C2410C', '#475569'];
-const getGradientStyle = (hex) => hex ? { background: `linear-gradient(135deg, ${hex}, ${hex}dd)` } : {};
+export default function App(){
+  const[shortcuts,setShortcuts]=useState([]),[labelColors,setLabelColors]=useState({}),[loading,setLoading]=useState(true),[darkMode,setDarkMode]=useState(()=>localStorage.getItem('darkMode')==='true'),[bgImage,setBgImage]=useState(null),[serverBg,setServerBg]=useState(null),[overlayOpacity,setOverlayOpacity]=useState(()=>parseFloat(localStorage.getItem('overlayOpacity'))??0.5);
+  const[lightTextColor,setLightTextColor]=useState(()=>localStorage.getItem('custom_text_light')||DEFAULT_LIGHT_TEXT),[darkTextColor,setDarkTextColor]=useState(()=>localStorage.getItem('custom_text_dark')||DEFAULT_DARK_TEXT);
+  const[formData,setFormData]=useState({id:null,name:'',url:'',icon_url:'',parent_label:'',parent_color:COLOR_PRESETS[0],child_label:'',child_color:COLOR_PRESETS[1],isLocal:false}),[searchTerm,setSearchTerm]=useState(''),[showFilterPanel,setShowFilterPanel]=useState(false),[activeParentFilter,setActiveParentFilter]=useState(null),[activeChildFilter,setActiveChildFilter]=useState(null),[copiedId,setCopiedId]=useState(null),[isAdmin,setIsAdmin]=useState(false),[showLoginModal,setShowLoginModal]=useState(false),[showAddModal,setShowAddModal]=useState(false),[showInsightsModal,setShowInsightsModal]=useState(false),[insightsData,setInsightsData]=useState(null),[loginCreds,setLoginCreds]=useState({username:'',password:''}),[loginError,setLoginError]=useState(''),[sortBy,setSortBy]=useState('default'),[tenant,setTenant]=useState(()=>normalizeTenant(localStorage.getItem('tenant')));
+  const fileInputRef=useRef(null),bgInputRef=useRef(null),importInputRef=useRef(null);
 
-// Default Text Colors
-const DEFAULT_LIGHT_TEXT = '#0A1A2F';
-const DEFAULT_DARK_TEXT = '#E2E8F0';
+  useEffect(()=>{if(darkMode)document.documentElement.classList.add('dark');else document.documentElement.classList.remove('dark');localStorage.setItem('darkMode',darkMode)},[darkMode]);
+  const fetchData=async()=>{try{const r=await fetch('/api/data?tenant='+encodeURIComponent(tenant));const d=await r.json();const ss=d.shortcuts||[],ls=JSON.parse(localStorage.getItem('local_shortcuts')||'[]').map(s=>({...s,isLocal:true}));setShortcuts([...ss,...ls]);setLabelColors(d.labelColors||{});const c=d.appConfig||{};setServerBg(c.default_background||null);if(c.text_color_light&&!localStorage.getItem('custom_text_light'))setLightTextColor(c.text_color_light);if(c.text_color_dark&&!localStorage.getItem('custom_text_dark'))setDarkTextColor(c.text_color_dark);const lbg=localStorage.getItem('custom_bg');setBgImage(lbg||c.default_background||null)}catch(e){console.error(e)}finally{setLoading(false)}};
+  useEffect(()=>{fetchData()},[tenant]);
+  const saveConfig=async(k,v)=>{try{await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({[k]:v})})}catch{}};
+  const handleTextColorChange=(m,c)=>{if(m==='light'){setLightTextColor(c);localStorage.setItem('custom_text_light',c)}else{setDarkTextColor(c);localStorage.setItem('custom_text_dark',c)}};
+  const handleBgUpload=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{const b=ev.target.result;setBgImage(b);if(isAdmin){if(confirm("Lưu mặc định server?")){saveConfig('default_background',b);alert("Đã lưu server!")}else localStorage.setItem('custom_bg',b)}else localStorage.setItem('custom_bg',b)};r.readAsDataURL(f)};
+  const fetchInsights=async()=>{try{const r=await fetch('/api/insights');setInsightsData(await r.json());setShowInsightsModal(true)}catch{alert("Lỗi insights")}};
+  const handleResetBg=()=>{localStorage.removeItem('custom_bg');setBgImage(serverBg);alert("Đã reset BG")};
+  const resetForm=()=>setFormData({id:null,name:'',url:'',icon_url:'',parent_label:'',parent_color:COLOR_PRESETS[0],child_label:'',child_color:COLOR_PRESETS[1],isLocal:false});
+  const handleSubmit=async e=>{e.preventDefault();if(!formData.name.trim()||!formData.url.trim())return alert('Thiếu tên/URL');const isLocal=!isAdmin||formData.isLocal;if(isLocal){const l=JSON.parse(localStorage.getItem('local_shortcuts')||'[]');let nl;if(formData.id&&formData.isLocal)nl=l.map(s=>s.id===formData.id?{...formData,id:formData.id}:s);else nl=[{...formData,id:Date.now(),clicks:0,favorite:0},...l];localStorage.setItem('local_shortcuts',JSON.stringify(nl));fetchData();setShowAddModal(false);resetForm()}else{try{const r=await fetch(formData.id?`/api/shortcuts/${formData.id}`:'/api/shortcuts',{method:formData.id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(formData)});if(r.ok){await fetchData();setShowAddModal(false);resetForm()}}catch{alert('Lỗi Server')}}};
+  const handleDelete=async id=>{if(!confirm('Xóa?'))return;const t=shortcuts.find(s=>s.id===id);if(t&&t.isLocal){const l=JSON.parse(localStorage.getItem('local_shortcuts')||'[]');localStorage.setItem('local_shortcuts',JSON.stringify(l.filter(s=>s.id!==id)));fetchData()}else if(isAdmin){await fetch(`/api/shortcuts/${id}`,{method:'DELETE'});fetchData()}};
+  const handleToggleFavorite=async(id,e)=>{e.stopPropagation();const t=shortcuts.find(s=>s.id===id);if(t&&t.isLocal){const l=JSON.parse(localStorage.getItem('local_shortcuts')||'[]');localStorage.setItem('local_shortcuts',JSON.stringify(l.map(s=>s.id===id?{...s,favorite:s.favorite?0:1}:s)));fetchData()}else{await fetch(`/api/favorite/${id}`,{method:'POST'});fetchData()}};
+  const handleLinkClick=(id,u)=>{const t=shortcuts.find(s=>s.id===id);if(!t?.isLocal)fetch(`/api/click/${id}`,{method:'POST'});window.open(u,'_blank')};
+  const handleEdit=(i,e)=>{e.stopPropagation();setFormData({...i,icon_url:i.icon_url||''});setShowAddModal(true)};
+  const handleLogin=e=>{e.preventDefault();if(loginCreds.username==='admin'&&loginCreds.password==='miniappadmin'){setIsAdmin(true);setShowLoginModal(false)}else setLoginError('Sai thông tin')};
+  const handleImageUpload=e=>{const f=e.target.files[0];if(f){const r=new FileReader();r.onload=ev=>setFormData(p=>({...p,icon_url:ev.target.result}));r.readAsDataURL(f)}};
+  const handleExportData=()=>{const d='data:text/json;charset=utf-8,'+encodeURIComponent(JSON.stringify({version:2,timestamp:new Date().toISOString(),shortcuts:shortcuts.filter(s=>!s.isLocal),labels:labelColors}));const a=document.createElement('a');a.href=d;a.download='backup.json';document.body.appendChild(a);a.click();a.remove()};
+  const handleImportData=e=>{const f=e.target.files[0];if(f){const r=new FileReader();r.onload=async ev=>{await fetch('/api/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(JSON.parse(ev.target.result))});alert("Import OK!");fetchData()};r.readAsText(f)}};
 
-export default function App() {
-  const [shortcuts, setShortcuts] = useState([]);
-  const [labelColors, setLabelColors] = useState({});
-  const [loading, setLoading] = useState(true);
-  const [darkMode, setDarkMode] = useState(() => localStorage.getItem('darkMode') === 'true');
+  const uniqueParents=useMemo(()=>[...new Set(shortcuts.map(s=>s.parent_label).filter(Boolean))].sort(),[shortcuts]);
+  const uniqueChildren=useMemo(()=>[...new Set(shortcuts.flatMap(s=>(s.child_label||'').split(',').map(t=>t.trim()).filter(Boolean)))].sort(),[shortcuts]);
+  const filteredShortcuts=useMemo(()=>{let r=shortcuts.filter(i=>{const t=searchTerm.trim().toLowerCase(),m=(!t||i.name.toLowerCase().includes(t))&&(!activeParentFilter||i.parent_label===activeParentFilter);if(!m)return false;if(activeChildFilter){const tags=(i.child_label||'').split(',').map(s=>s.trim());if(!tags.includes(activeChildFilter))return false}return true});r.sort((a,b)=>(b.favorite-a.favorite)||(sortBy==='alpha'?a.name.localeCompare(b.name):0));return r},[shortcuts,searchTerm,activeParentFilter,activeChildFilter,sortBy]);
+
+  const bgClass=darkMode?'bg-gray-900':'bg-[#F4F4F4]',currentTextColor=darkMode?darkTextColor:lightTextColor;
+  const cardClass=darkMode?'bg-gray-800 border-gray-700 hover:border-blue-500':'bg-white border-[#D8D8D8] hover:border-[#009FB8]';
+  const inputClass=darkMode?'bg-gray-800 border-gray-700':'bg-white border-[#D8D8D8]',modalClass=darkMode?'bg-gray-900 border-gray-700':'bg-white border-[#D8D8D8]';
   
-  // Config State
-  const [bgImage, setBgImage] = useState(null);
-  const [serverBg, setServerBg] = useState(null);
-  const [overlayOpacity, setOverlayOpacity] = useState(() => parseFloat(localStorage.getItem('overlayOpacity')) ?? 0.5);
-  
-  // Text Color State
-  const [lightTextColor, setLightTextColor] = useState(DEFAULT_LIGHT_TEXT);
-  const [darkTextColor, setDarkTextColor] = useState(DEFAULT_DARK_TEXT);
-
-  const [sortBy, setSortBy] = useState('default');
-  const [formData, setFormData] = useState({ id: null, name: '', url: '', icon_url: '', parent_label: '', parent_color: COLOR_PRESETS[0], child_label: '', child_color: COLOR_PRESETS[1], isLocal: false });
-  const [searchTerm, setSearchTerm] = useState('');
-  const [showFilterPanel, setShowFilterPanel] = useState(false);
-  const [activeParentFilter, setActiveParentFilter] = useState(null);
-  const [activeChildFilter, setActiveChildFilter] = useState(null);
-  
-  const [copiedId, setCopiedId] = useState(null);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [showLoginModal, setShowLoginModal] = useState(false);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [showInsightsModal, setShowInsightsModal] = useState(false);
-  const [insightsData, setInsightsData] = useState(null);
-
-  const [loginCreds, setLoginCreds] = useState({ username: '', password: '' });
-  const [loginError, setLoginError] = useState('');
-  
-  const fileInputRef = useRef(null);
-  const bgInputRef = useRef(null);
-  const importInputRef = useRef(null);
-
-  // Apply dark mode class
-  useEffect(() => {
-    if (darkMode) document.documentElement.classList.add('dark');
-    else document.documentElement.classList.remove('dark');
-    localStorage.setItem('darkMode', darkMode);
-  }, [darkMode]);
-
-  // Fetch Data
-  const fetchData = async () => {
-    try {
-      const res = await fetch('/api/data');
-      const data = await res.json();
-      
-      // Handle Shortcuts
-      const serverShortcuts = data.shortcuts || [];
-      const localShortcuts = JSON.parse(localStorage.getItem('local_shortcuts') || '[]').map(s => ({...s, isLocal: true}));
-      setShortcuts([...serverShortcuts, ...localShortcuts]);
-      setLabelColors(data.labelColors || {});
-      
-      // Handle Configs
-      const config = data.appConfig || {};
-      setServerBg(config.default_background || null);
-      setLightTextColor(config.text_color_light || DEFAULT_LIGHT_TEXT);
-      setDarkTextColor(config.text_color_dark || DEFAULT_DARK_TEXT);
-
-      // Handle BG Priority: Local > Server > Null
-      const localBg = localStorage.getItem('custom_bg');
-      if (localBg) setBgImage(localBg); 
-      else if (config.default_background) setBgImage(config.default_background);
-      else setBgImage(null);
-
-    } catch (e) { console.error(e); } finally { setLoading(false); }
-  };
-
-  useEffect(() => { fetchData(); }, []);
-
-  // --- HANDLERS ---
-  
-  const saveConfig = async (key, value) => {
-      try {
-          await fetch('/api/config', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ [key]: value })
-          });
-      } catch(e) { console.error("Config save failed", e); }
-  };
-
-  const handleTextColorChange = (mode, color) => {
-      if (mode === 'light') {
-          setLightTextColor(color);
-          if (isAdmin) saveConfig('text_color_light', color);
-      } else {
-          setDarkTextColor(color);
-          if (isAdmin) saveConfig('text_color_dark', color);
-      }
-  };
-
-  const handleBgUpload = (e) => { 
-      const f=e.target.files[0]; if(!f)return; 
-      const r=new FileReader(); 
-      r.onload=async (ev)=>{ 
-          const b=ev.target.result; 
-          setBgImage(b); 
-          if(isAdmin){ 
-              if(confirm("Đặt làm mặc định toàn hệ thống?")){ 
-                  saveConfig('default_background', b);
-                  alert("Đã lưu Server!"); 
-              } else { localStorage.setItem('custom_bg',b); } 
-          } else { localStorage.setItem('custom_bg',b); } 
-      }; 
-      r.readAsDataURL(f); 
-  };
-
-  const fetchInsights = async () => {
-      try {
-          const res = await fetch('/api/insights');
-          const data = await res.json();
-          setInsightsData(data);
-          setShowInsightsModal(true);
-      } catch (e) { alert("Lỗi tải insights"); }
-  };
-
-  const handleResetBg = () => { localStorage.removeItem('custom_bg'); setBgImage(serverBg); alert("Đã đặt lại hình nền."); };
-  const resetForm = () => setFormData({ id: null, name: '', url: '', icon_url: '', parent_label: '', parent_color: COLOR_PRESETS[0], child_label: '', child_color: COLOR_PRESETS[1], isLocal: false });
-  
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!formData.name.trim() || !formData.url.trim()) return alert('Thiếu tên/URL');
-    const isLocalSave = !isAdmin || formData.isLocal;
-    if (isLocalSave) {
-        const local = JSON.parse(localStorage.getItem('local_shortcuts') || '[]');
-        let newLocal;
-        if (formData.id && formData.isLocal) newLocal = local.map(s => s.id === formData.id ? { ...formData, id: formData.id } : s);
-        else newLocal = [{ ...formData, id: Date.now(), clicks: 0, favorite: 0 }, ...local];
-        localStorage.setItem('local_shortcuts', JSON.stringify(newLocal));
-        fetchData(); setShowAddModal(false); resetForm();
-    } else {
-        try {
-          const res = await fetch(formData.id ? `/api/shortcuts/${formData.id}` : '/api/shortcuts', { method: formData.id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formData) });
-          if(res.ok) { await fetchData(); setShowAddModal(false); resetForm(); }
-        } catch(e) { alert('Lỗi Server'); }
-    }
-  };
-
-  const handleDelete = async (id) => { 
-    if(!confirm('Xóa?')) return;
-    const target = shortcuts.find(s => s.id === id);
-    if (target && target.isLocal) {
-        const local = JSON.parse(localStorage.getItem('local_shortcuts') || '[]');
-        localStorage.setItem('local_shortcuts', JSON.stringify(local.filter(s => s.id !== id)));
-        fetchData();
-    } else if (isAdmin) {
-        await fetch(`/api/shortcuts/${id}`, {method:'DELETE'}); fetchData(); 
-    }
-  };
-
-  const handleToggleFavorite = async (id,e) => { 
-    e.stopPropagation(); 
-    const target = shortcuts.find(s => s.id === id);
-    if (target && target.isLocal) {
-        const local = JSON.parse(localStorage.getItem('local_shortcuts') || '[]');
-        localStorage.setItem('local_shortcuts', JSON.stringify(local.map(s => s.id === id ? { ...s, favorite: s.favorite ? 0 : 1 } : s)));
-        fetchData();
-    } else { await fetch(`/api/favorite/${id}`,{method:'POST'}); fetchData(); }
-  };
-
-  const handleLinkClick = (id, url) => { 
-     const target = shortcuts.find(s => s.id === id);
-     if (!target?.isLocal) fetch(`/api/click/${id}`,{method:'POST'}); 
-     window.open(url, '_blank'); 
-  };
-
-  const handleEdit = (item,e) => { e.stopPropagation(); setFormData({...item, icon_url: item.icon_url||''}); setShowAddModal(true); };
-  const handleLogin = (e) => { e.preventDefault(); if(loginCreds.username==='admin'&&loginCreds.password==='miniappadmin'){setIsAdmin(true);setShowLoginModal(false);}else setLoginError('Sai thông tin'); };
-  const handleImageUpload = (e) => { const f=e.target.files[0]; if(f){const r=new FileReader();r.onload=(ev)=>setFormData(p=>({...p,icon_url:ev.target.result}));r.readAsDataURL(f);} };
-  const handleExportData = () => { const d='data:text/json;charset=utf-8,'+encodeURIComponent(JSON.stringify({version:1,timestamp:new Date().toISOString(),shortcuts: shortcuts.filter(s=>!s.isLocal),labels:labelColors})); const a=document.createElement('a'); a.href=d; a.download='backup.json'; document.body.appendChild(a); a.click(); a.remove(); };
-  const handleImportData = (e) => { const f=e.target.files[0]; if(f){const r=new FileReader();r.onload=async(ev)=>{await fetch('/api/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(JSON.parse(ev.target.result))});alert("Import OK!");fetchData();};r.readAsText(f);} };
-
-  const uniqueParents = useMemo(() => [...new Set(shortcuts.map(s => s.parent_label).filter(Boolean))].sort(), [shortcuts]);
-  const uniqueChildren = useMemo(() => [...new Set(shortcuts.map(s => s.child_label).filter(Boolean))].sort(), [shortcuts]);
-  const filteredShortcuts = useMemo(() => {
-    let res = shortcuts.filter(i => (!searchTerm || i.name.toLowerCase().includes(searchTerm.toLowerCase())) && (!activeParentFilter || i.parent_label === activeParentFilter) && (!activeChildFilter || i.child_label === activeChildFilter));
-    res.sort((a,b) => (b.favorite - a.favorite) || (sortBy==='alpha'?a.name.localeCompare(b.name) : 0));
-    return res;
-  }, [shortcuts, searchTerm, activeParentFilter, activeChildFilter, sortBy]);
-
-  // Dynamic Styles
-  const bgClass = darkMode ? 'bg-gray-900' : 'bg-[#F4F4F4]'; // Text color handled by inline style
-  const currentTextColor = darkMode ? darkTextColor : lightTextColor;
-  
-  const cardClass = darkMode ? 'bg-gray-800 border-gray-700 hover:border-blue-500' : 'bg-white border-[#D8D8D8] hover:border-[#009FB8]';
-  const inputClass = darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-[#D8D8D8]'; // Removed text-white to apply dynamic
-  const modalClass = darkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-[#D8D8D8]';
-
-  if (loading) return <div className={`min-h-screen flex items-center justify-center ${bgClass}`}><Activity className="w-8 h-8 animate-spin text-blue-500"/></div>;
+  if(loading)return<div className={`min-h-screen flex items-center justify-center ${bgClass}`}><Activity className="w-8 h-8 animate-spin text-blue-500"/></div>;
 
   return (
-    <div className={`min-h-screen font-light transition-all duration-300 bg-cover bg-center bg-no-repeat bg-fixed ${bgClass}`} style={{ backgroundImage: bgImage ? `url(${bgImage})` : 'none', color: currentTextColor }}>
-      <div className={`min-h-screen w-full transition-colors duration-300`} style={{ backgroundColor: bgImage ? (darkMode ? `rgba(0,0,0,${overlayOpacity})` : `rgba(255,255,255,${overlayOpacity})`) : '' }}>
-          
-          {/* HEADER */}
-          <div className="sticky top-0 z-30 w-full flex flex-col pt-4 px-4 gap-2 pointer-events-none">
-            <div className="pointer-events-auto w-full max-w-2xl mx-auto flex items-center justify-center gap-3">
-              <div className="flex-1 flex items-center gap-2 min-w-0">
-                 <div className="relative group w-full max-w-lg mx-auto transition-all">
-                    <Search className="absolute inset-y-0 left-0 pl-3 h-full w-7 opacity-50" />
-                    <input type="text" className={`block w-full pl-10 pr-3 py-2 border rounded-full text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-[#009FB8] ${inputClass} ${bgImage ? 'bg-opacity-80 backdrop-blur-md' : ''}`} 
-                           style={{ color: currentTextColor }}
-                           placeholder="Tìm kiếm..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-                 </div>
-                 <button onClick={() => setShowFilterPanel(!showFilterPanel)} className={`p-2 rounded-full shadow-sm border ${inputClass} ${bgImage ? 'bg-opacity-80' : ''}`}><Filter size={18} /></button>
-                 <div className="hidden sm:flex items-center gap-1 bg-gray-200/50 dark:bg-gray-800/50 rounded-full p-1 backdrop-blur-sm">
-                    <button onClick={() => setSortBy('default')} className={`p-1.5 rounded-full text-xs ${sortBy === 'default' ? 'bg-white dark:bg-gray-700 shadow' : 'opacity-50'}`}><List size={14}/></button>
-                    <button onClick={() => setSortBy('alpha')} className={`p-1.5 rounded-full text-xs ${sortBy === 'alpha' ? 'bg-white dark:bg-gray-700 shadow' : 'opacity-50'}`}>Aa</button>
-                 </div>
-              </div>
-            </div>
-
-            {/* Filter Panel */}
-            {showFilterPanel && (
-                <div className={`pointer-events-auto w-full max-w-5xl mx-auto rounded-2xl p-3 shadow-lg flex flex-col gap-2 border ${modalClass} bg-opacity-95 backdrop-blur-md`}>
-                   <div className="flex flex-wrap gap-2">
-                      <span className="text-xs font-bold uppercase opacity-60">Nhóm:</span>
-                      <button onClick={() => setActiveParentFilter(null)} className={`px-3 py-1 text-xs rounded-full border ${!activeParentFilter ? 'bg-[#0A1A2F] text-white' : ''}`}>All</button>
-                      {uniqueParents.map(l => <button key={l} onClick={() => setActiveParentFilter(l)} className={`px-3 py-1 text-xs rounded-full border ${activeParentFilter === l ? 'ring-2 ring-[#009FB8]' : ''}`} style={{ background: labelColors[l] }}>{l}</button>)}
-                   </div>
-                   {uniqueChildren.length > 0 && <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-500/20"><span className="text-xs font-bold opacity-60">Tag:</span>
-                      {uniqueChildren.map(l => <button key={l} onClick={() => setActiveChildFilter(activeChildFilter === l ? null : l)} className={`px-2 py-0.5 text-[10px] rounded border ${activeChildFilter===l?'bg-[#009FB8] text-white':''}`}>{l}</button>)}
-                   </div>}
-                </div>
-            )}
-          </div>
-
-          {/* GRID CONTENT */}
-          <div className="max-w-7xl mx-auto px-6 pb-20 pt-8">
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-8 gap-y-10 justify-items-center">
-                {filteredShortcuts.map((item) => (
-                  <div key={item.id} className="group relative flex flex-col items-center w-28 cursor-pointer active:scale-95 transition-transform" onClick={() => handleLinkClick(item.id, item.url)}>
-                    <div className="absolute -top-2 -right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10 scale-90">
-                       <button onClick={(e) => { e.stopPropagation(); setCopiedId(item.id); navigator.clipboard.writeText(item.url); setTimeout(()=>setCopiedId(null),1000); }} className={`p-1.5 rounded-full shadow-sm border ${cardClass} bg-opacity-90`}>
-                            {copiedId === item.id ? <Check size={12} className="text-green-500"/> : <Copy size={12} />}
-                       </button>
-                       {(isAdmin || item.isLocal) && (
-                        <>
-                          <button onClick={e => handleEdit(item, e)} className={`p-1.5 rounded-full shadow-sm border ml-1 ${cardClass}`}><Pencil size={12}/></button>
-                          <button onClick={e => { e.stopPropagation(); handleDelete(item.id); }} className={`p-1.5 rounded-full shadow-sm border ml-1 ${cardClass}`}><Trash2 size={12}/></button>
-                        </>
-                       )}
-                    </div>
-                    <button onClick={(e) => handleToggleFavorite(item.id, e)} className={`absolute -top-1 -left-1 z-10 p-1 rounded-full transition-transform hover:scale-110 ${item.favorite ? 'text-yellow-400' : 'text-gray-300 opacity-0 group-hover:opacity-100'}`}><Star size={16} fill={item.favorite ? "currentColor" : "none"} /></button>
-                    <div className={`w-20 h-20 rounded-[1.4rem] bg-gradient-to-br flex items-center justify-center text-white text-3xl font-bold shadow-md hover:shadow-lg transition-all mb-2 overflow-hidden relative backdrop-blur-sm bg-opacity-90`} style={getGradientStyle(labelColors[item.parent_label] || '#0A1A2F')}>
-                      {item.icon_url ? <img src={item.icon_url} className="w-full h-full object-cover" /> : <span>{item.name.charAt(0).toUpperCase()}</span>}
-                    </div>
-                    <span className={`text-sm text-center truncate w-32 px-1 leading-tight font-light`} style={{ textShadow: bgImage ? '0 1px 2px rgba(0,0,0,0.5)' : 'none' }}>{item.name}</span>
-                    <div className="flex flex-wrap justify-center gap-1 mt-1 px-1">
-                        {item.parent_label && <span className="text-[9px] px-1.5 py-0.5 rounded-full text-white truncate max-w-[70px] shadow-sm" style={{ background: labelColors[item.parent_label] || '#9CA3AF' }}>{item.parent_label}</span>}
-                        {item.child_label && <span className={`text-[9px] px-1.5 py-0.5 rounded-full border truncate max-w-[70px] bg-white/50 backdrop-blur-sm ${darkMode ? 'border-gray-600' : 'border-gray-300'}`} style={{ borderColor: labelColors[item.child_label] }}>{item.child_label}</span>}
-                    </div>
-                    {item.isLocal && <div className="absolute bottom-8 right-2 bg-blue-500/80 text-white text-[8px] px-1 rounded">LOCAL</div>}
-                  </div>
-                ))}
-                
-                <div className="flex flex-col items-center w-28 cursor-pointer group" onClick={() => { resetForm(); setShowAddModal(true); }}>
-                    <div className={`w-20 h-20 rounded-[1.4rem] border-2 border-dashed flex items-center justify-center transition-all mb-3 ${darkMode ? 'border-gray-600 bg-gray-800/50' : 'border-gray-300 bg-white/50 hover:border-[#009FB8]'}`}><Plus size={32} className="opacity-50"/></div>
-                    <span className="text-sm font-medium opacity-50">Thêm App</span>
-                </div>
+    <div className={`min-h-screen font-light transition-all duration-300 bg-cover bg-center bg-no-repeat bg-fixed ${bgClass}`} style={{backgroundImage:bgImage?`url(${bgImage})`:'none',color:currentTextColor}}>
+      <div className="min-h-screen w-full transition-colors duration-300" style={{backgroundColor:bgImage?(darkMode?`rgba(0,0,0,${overlayOpacity})`:`rgba(255,255,255,${overlayOpacity})`):''}}>
+        <div className="sticky top-0 z-30 w-full flex flex-col pt-4 px-4 gap-2 pointer-events-none">
+          <div className="pointer-events-auto w-full max-w-2xl mx-auto flex items-center justify-center gap-3">
+            <div className="flex-1 flex items-center gap-2 min-w-0">
+               <div className="relative group w-full max-w-lg mx-auto transition-all">
+                  <Search className="absolute inset-y-0 left-0 pl-3 h-full w-7 opacity-50" />
+                  <input type="text" className={`block w-full pl-10 pr-3 py-2 border rounded-full text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-[#009FB8] ${inputClass} ${bgImage?'bg-opacity-80 backdrop-blur-md':''}`} style={{color:currentTextColor}} placeholder="Tìm kiếm..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} />
+               </div>
+               <button onClick={()=>setShowFilterPanel(!showFilterPanel)} className={`p-2 rounded-full shadow-sm border ${inputClass} ${bgImage?'bg-opacity-80':''}`}><Filter size={18}/></button>
+               <div className="hidden sm:flex items-center gap-1 bg-gray-200/50 dark:bg-gray-800/50 rounded-full p-1 backdrop-blur-sm">
+                  <button onClick={()=>setSortBy('default')} className={`p-1.5 rounded-full text-xs ${sortBy==='default'?'bg-white dark:bg-gray-700 shadow':'opacity-50'}`}><List size={14}/></button>
+                  <button onClick={()=>setSortBy('alpha')} className={`p-1.5 rounded-full text-xs ${sortBy==='alpha'?'bg-white dark:bg-gray-700 shadow':'opacity-50'}`}>Aa</button>
+               </div>
             </div>
           </div>
+          {showFilterPanel&&(
+            <div className={`pointer-events-auto w-full max-w-5xl mx-auto rounded-2xl p-3 shadow-lg flex flex-col gap-2 border ${modalClass} bg-opacity-95 backdrop-blur-md`}>
+              <div className="flex flex-wrap gap-2"><span className="text-xs font-bold uppercase opacity-60">Nhóm:</span><button onClick={()=>setActiveParentFilter(null)} className={`px-3 py-1 text-xs rounded-full border ${!activeParentFilter?'bg-[#0A1A2F] text-white':''}`}>All</button>{uniqueParents.map(l=><button key={l} onClick={()=>setActiveParentFilter(l)} className={`px-3 py-1 text-xs rounded-full border ${activeParentFilter===l?'ring-2 ring-[#009FB8]':''}`} style={{background:labelColors[l],color:getContrastYIQ(labelColors[l])}}>{l}</button>)}</div>
+              {uniqueChildren.length>0&&<div className="flex flex-wrap gap-2 pt-2 border-t border-gray-500/20"><span className="text-xs font-bold opacity-60">Tag:</span>{uniqueChildren.map(l=><button key={l} onClick={()=>setActiveChildFilter(activeChildFilter===l?null:l)} className={`px-2 py-0.5 text-[10px] rounded border ${activeChildFilter===l?'bg-[#009FB8] text-white':''}`} style={activeChildFilter===l&&labelColors[l]?{background:labelColors[l],borderColor:labelColors[l],color:getContrastYIQ(labelColors[l])}:{}}>{l}</button>)}</div>}
+            </div>
+          )}
+        </div>
 
-          {/* SETTINGS DOCK */}
-          <div className="fixed bottom-6 right-6 z-50 pointer-events-auto opacity-0 hover:opacity-100 transition-opacity duration-300">
-             <div className="group/menu flex items-center justify-end gap-2 p-2 rounded-full hover:bg-white/20 hover:backdrop-blur-md transition-all">
-                 <div className="flex items-center gap-2">
-                    {bgImage && <div className="flex items-center gap-1 mr-2 bg-black/40 rounded-full px-2 py-1 backdrop-blur-sm"><span className="text-[10px] text-white/90 font-bold">BG</span><input type="range" min="0" max="0.9" step="0.1" value={overlayOpacity} onChange={(e) => { const val = parseFloat(e.target.value); setOverlayOpacity(val); localStorage.setItem('overlayOpacity', val); }} className="w-16 h-1 accent-[#009FB8] cursor-pointer" /></div>}
-                    <button onClick={() => setDarkMode(!darkMode)} className={`p-2 rounded-full border shadow-sm ${inputClass} ${bgImage ? 'bg-opacity-80' : ''}`}>{darkMode ? <Sun size={18} className="text-yellow-400"/> : <Moon size={18} className="text-gray-600"/>}</button>
-                    
-                    {isAdmin ? (
-                        <div className={`flex items-center gap-2 px-2 py-1 rounded-full border shadow-lg ${modalClass} bg-opacity-90 backdrop-blur`}>
-                           {/* Text Color Pickers */}
-                           <div className="flex flex-col gap-1 mr-1">
-                               <div className="flex items-center gap-1" title="Màu chữ Light Mode">
-                                   <Sun size={10} className="text-orange-400"/>
-                                   <input type="color" value={lightTextColor} onChange={(e)=>handleTextColorChange('light', e.target.value)} className="w-5 h-5 rounded cursor-pointer border-none"/>
-                               </div>
-                               <div className="flex items-center gap-1" title="Màu chữ Dark Mode">
-                                   <Moon size={10} className="text-blue-300"/>
-                                   <input type="color" value={darkTextColor} onChange={(e)=>handleTextColorChange('dark', e.target.value)} className="w-5 h-5 rounded cursor-pointer border-none"/>
-                               </div>
-                           </div>
+        <div className="max-w-7xl mx-auto px-6 pb-20 pt-8"><div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-8 gap-y-10 justify-items-center">
+          {filteredShortcuts.map(i=>(<div key={i.id} className="group relative flex flex-col items-center w-28 cursor-pointer active:scale-95 transition-transform" onClick={()=>handleLinkClick(i.id,i.url)}>
+            <div className="absolute -top-2 -right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10 scale-90"><button onClick={e=>{e.stopPropagation();setCopiedId(i.id);navigator.clipboard.writeText(i.url);setTimeout(()=>setCopiedId(null),1000)}} className={`p-1.5 rounded-full shadow-sm border ${cardClass} bg-opacity-90`}>{copiedId===i.id?<Check size={12} className="text-green-500"/>:<Copy size={12}/>}</button>{(isAdmin||i.isLocal)&&(<><button onClick={e=>handleEdit(i,e)} className={`p-1.5 rounded-full shadow-sm border ml-1 ${cardClass}`}><Pencil size={12}/></button><button onClick={e=>{e.stopPropagation();handleDelete(i.id)}} className={`p-1.5 rounded-full shadow-sm border ml-1 ${cardClass}`}><Trash2 size={12}/></button></>)}</div>
+            <button onClick={e=>handleToggleFavorite(i.id,e)} className={`absolute -top-1 -left-1 z-10 p-1 rounded-full transition-transform hover:scale-110 ${i.favorite?'text-yellow-400':'text-gray-300 opacity-0 group-hover:opacity-100'}`}><Star size={16} fill={i.favorite?"currentColor":"none"}/></button>
+            <div className={`w-20 h-20 rounded-[1.4rem] bg-gradient-to-br flex items-center justify-center text-white text-3xl font-bold shadow-md hover:shadow-lg transition-all mb-2 overflow-hidden relative backdrop-blur-sm bg-opacity-90`} style={getGradientStyle(labelColors[i.parent_label]||'#0A1A2F')}>{i.icon_url?<img src={i.icon_url} className="w-full h-full object-cover"/>:<span>{i.name.charAt(0).toUpperCase()}</span>}</div>
+            <span className="text-sm text-center truncate w-32 px-1 leading-tight font-light" style={{textShadow:bgImage?'0 1px 2px rgba(0,0,0,0.5)':'none'}}>{i.name}</span>
+            <div className="flex flex-wrap justify-center gap-1 mt-1 px-1">
+              {i.parent_label&&<span className="text-[9px] px-1.5 py-0.5 rounded-full truncate max-w-[70px] shadow-sm" style={{background:labelColors[i.parent_label]||'#9CA3AF',color:getContrastYIQ(labelColors[i.parent_label]||'#9CA3AF')}}>{i.parent_label}</span>}
+              {(i.child_label||'').split(',').filter(Boolean).map(t=><span key={t} className={`text-[9px] px-1.5 py-0.5 rounded-full border truncate max-w-[70px] bg-white/50 backdrop-blur-sm ${darkMode?'border-gray-600':'border-gray-300'}`} style={{borderColor:labelColors[t],color:labelColors[t]||(darkMode?'#ddd':'#333')}}>{t.trim()}</span>)}
+            </div>
+            {i.isLocal&&<div className="absolute bottom-8 right-2 bg-blue-500/80 text-white text-[8px] px-1 rounded">LOCAL</div>}
+          </div>))}
+          <div className="flex flex-col items-center w-28 cursor-pointer group" onClick={()=>{resetForm();setShowAddModal(true)}}><div className={`w-20 h-20 rounded-[1.4rem] border-2 border-dashed flex items-center justify-center transition-all mb-3 ${darkMode?'border-gray-600 bg-gray-800/50':'border-gray-300 bg-white/50 hover:border-[#009FB8]'}`}><Plus size={32} className="opacity-50"/></div><span className="text-sm font-medium opacity-50">Thêm App</span></div>
+        </div></div>
 
-                           <button onClick={fetchInsights} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-orange-500" title="Phân tích"><ChartIcon size={16}/></button>
-                           <button onClick={() => { resetForm(); setShowAddModal(true); }} className="p-1.5 bg-[#0F2F55] text-white rounded-full hover:scale-110"><Plus size={16}/></button>
-                           <button onClick={handleExportData} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-blue-500"><Download size={16}/></button>
-                           <button onClick={() => importInputRef.current?.click()} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-green-500"><FileUp size={16}/></button>
-                           <input type="file" ref={importInputRef} className="hidden" accept=".json" onChange={handleImportData} />
-                           <button onClick={() => bgInputRef.current?.click()} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-purple-500"><ImageIcon size={16}/></button>
-                           <input type="file" ref={bgInputRef} className="hidden" accept="image/*" onChange={handleBgUpload} />
-                           <div className="w-px h-4 bg-gray-300 mx-1"></div>
-                           <button onClick={() => setIsAdmin(false)} className="p-1.5 hover:bg-red-100 dark:hover:bg-red-900 rounded-full text-red-500"><LogOut size={16}/></button>
-                        </div>
-                     ) : (
-                        <div className={`flex items-center gap-1 p-1 rounded-full border shadow-lg ${inputClass} bg-opacity-80 backdrop-blur`}>
-                            <button onClick={() => bgInputRef.current?.click()} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"><ImageIcon size={16}/></button>
-                            <input type="file" ref={bgInputRef} className="hidden" accept="image/*" onChange={handleBgUpload} />
-                            {localStorage.getItem('custom_bg') && <button onClick={handleResetBg} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-orange-500"><RotateCcw size={16}/></button>}
-                            <button onClick={() => setShowLoginModal(true)} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"><Settings size={18} /></button>
-                        </div>
-                     )}
-                 </div>
-                 <div className="w-10 h-10 flex items-center justify-center bg-white/20 backdrop-blur-md rounded-full border border-white/30 text-white shadow-lg cursor-pointer group-hover/menu:hidden absolute bottom-0 right-0 pointer-events-none"><Settings size={20} className="animate-spin-slow" /></div>
-             </div>
+        <div className="fixed bottom-6 right-6 z-50 pointer-events-auto opacity-0 hover:opacity-100 transition-opacity duration-300">
+          <div className="group/menu flex items-center justify-end gap-2 p-2 rounded-full hover:bg-white/20 hover:backdrop-blur-md transition-all">
+            <div className="flex items-center gap-2">{bgImage&&<div className="flex items-center gap-1 mr-2 bg-black/40 rounded-full px-2 py-1 backdrop-blur-sm"><span className="text-[10px] text-white/90 font-bold">BG</span><input type="range" min="0" max="0.9" step="0.1" value={overlayOpacity} onChange={e=>{const v=parseFloat(e.target.value);setOverlayOpacity(v);localStorage.setItem('overlayOpacity',v)}} className="w-16 h-1 accent-[#009FB8] cursor-pointer"/></div>}
+            <button onClick={()=>setDarkMode(!darkMode)} className={`p-2 rounded-full border shadow-sm ${inputClass} ${bgImage?'bg-opacity-80':''}`}>{darkMode?<Sun size={18} className="text-yellow-400"/>:<Moon size={18} className="text-gray-600"/>}</button>
+            <div className={`flex items-center gap-1 p-1 rounded-full border shadow-lg ${inputClass} bg-opacity-80 backdrop-blur`}>
+              <div className="flex flex-col gap-0.5 mr-1 border-r border-gray-400/30 pr-1"><div className="flex items-center gap-1" title="Text Light"><Type size={10} className="text-orange-400"/><input type="color" value={lightTextColor} onChange={e=>handleTextColorChange('light',e.target.value)} className="w-4 h-4 p-0 border-none bg-transparent cursor-pointer"/></div><div className="flex items-center gap-1" title="Text Dark"><Type size={10} className="text-blue-300"/><input type="color" value={darkTextColor} onChange={e=>handleTextColorChange('dark',e.target.value)} className="w-4 h-4 p-0 border-none bg-transparent cursor-pointer"/></div></div>
+              <button onClick={()=>bgInputRef.current?.click()} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"><ImageIcon size={16}/></button><input type="file" ref={bgInputRef} className="hidden" accept="image/*" onChange={handleBgUpload}/>
+              {isAdmin&&(<>
+                <button onClick={fetchInsights} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-orange-500"><ChartIcon size={16}/></button>
+                <button onClick={handleExportData} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-blue-500"><Download size={16}/></button>
+                <button onClick={()=>importInputRef.current?.click()} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-green-500"><FileUp size={16}/></button>
+                <input type="file" ref={importInputRef} className="hidden" accept=".json" onChange={handleImportData}/>
+                <div className="w-px h-4 bg-gray-300 mx-1"></div>
+                <button onClick={()=>setIsAdmin(false)} className="p-1.5 hover:bg-red-100 dark:hover:bg-red-900 rounded-full text-red-500"><LogOut size={16}/></button>
+              </>)}
+              {!isAdmin&&(<>
+                {localStorage.getItem('custom_bg')&&<button onClick={handleResetBg} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-orange-500"><RotateCcw size={16}/></button>}
+                <button onClick={()=>setShowLoginModal(true)} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"><Settings size={18}/></button>
+              </>)}
+            </div></div>
+            <div className="w-10 h-10 flex items-center justify-center bg-white/20 backdrop-blur-md rounded-full border border-white/30 text-white shadow-lg cursor-pointer group-hover/menu:hidden absolute bottom-0 right-0 pointer-events-none"><Settings size={20} className="animate-spin-slow"/></div>
           </div>
+        </div>
 
-          {/* INSIGHTS MODAL */}
-          {showInsightsModal && insightsData && (
-            <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-              <div className={`rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6 ${modalClass}`}>
-                <div className="flex justify-between items-center mb-6">
-                    <h3 className="font-bold text-xl flex items-center gap-2"><ChartIcon className="text-orange-500"/> Phân tích hành vi</h3>
-                    <button onClick={() => setShowInsightsModal(false)}><X size={24}/></button>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                    <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20">
-                        <p className="text-sm opacity-70">Tổng lượt click</p>
-                        <p className="text-3xl font-bold text-blue-500">{insightsData.totalClicks}</p>
-                    </div>
-                    <div className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/20">
-                        <p className="text-sm opacity-70">Top 1 Ứng dụng</p>
-                        <p className="text-xl font-bold text-purple-500 truncate">{insightsData.topApps[0]?.name || 'Chưa có'}</p>
-                    </div>
-                </div>
-
-                <div className="space-y-6">
-                    <div className="h-64 w-full p-4 rounded-xl border border-gray-500/20">
-                        <h4 className="text-sm font-bold mb-4 opacity-80">Xu hướng Click (7 ngày)</h4>
-                        <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={insightsData.timeline}>
-                                <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
-                                <XAxis dataKey="date" style={{fontSize: 10}} />
-                                <YAxis style={{fontSize: 10}} />
-                                <Tooltip contentStyle={{backgroundColor: darkMode?'#1f2937':'#fff', borderRadius: 8}} />
-                                <Line type="monotone" dataKey="count" stroke="#009FB8" strokeWidth={3} dot={{r:4}} />
-                            </LineChart>
-                        </ResponsiveContainer>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="h-64 p-4 rounded-xl border border-gray-500/20">
-                            <h4 className="text-sm font-bold mb-4 opacity-80">Top 5 Ứng dụng</h4>
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart layout="vertical" data={insightsData.topApps}>
-                                    <CartesianGrid strokeDasharray="3 3" opacity={0.1} horizontal={false}/>
-                                    <XAxis type="number" hide />
-                                    <YAxis dataKey="name" type="category" width={100} style={{fontSize: 10}} />
-                                    <Tooltip cursor={{fill: 'transparent'}} contentStyle={{backgroundColor: darkMode?'#1f2937':'#fff', borderRadius: 8}} />
-                                    <Bar dataKey="count" fill="#8884d8" radius={[0, 4, 4, 0]} barSize={20} />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-                        <div className="h-64 p-4 rounded-xl border border-gray-500/20">
-                            <h4 className="text-sm font-bold mb-4 opacity-80">Phân bổ theo giờ</h4>
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={insightsData.hourly}>
-                                    <CartesianGrid strokeDasharray="3 3" opacity={0.1} vertical={false}/>
-                                    <XAxis dataKey="hour" style={{fontSize: 10}} />
-                                    <YAxis style={{fontSize: 10}} />
-                                    <Tooltip cursor={{fill: 'transparent'}} contentStyle={{backgroundColor: darkMode?'#1f2937':'#fff', borderRadius: 8}} />
-                                    <Bar dataKey="count" fill="#82ca9d" radius={[4, 4, 0, 0]} />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </div>
-                </div>
-              </div>
+        {showInsightsModal&&insightsData&&(
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+            <div className={`rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6 ${modalClass}`}>
+              <div className="flex justify-between items-center mb-6"><h3 className="font-bold text-xl flex items-center gap-2"><ChartIcon className="text-orange-500"/> Phân tích</h3><button onClick={()=>setShowInsightsModal(false)}><X size={24}/></button></div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6"><div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20"><p className="text-sm opacity-70">Tổng Click</p><p className="text-3xl font-bold text-blue-500">{insightsData.totalClicks}</p></div><div className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/20"><p className="text-sm opacity-70">Top 1 App</p><p className="text-xl font-bold text-purple-500 truncate">{insightsData.topApps[0]?.name||'N/A'}</p></div></div>
+              <div className="space-y-6"><div className="h-64 w-full p-4 rounded-xl border border-gray-500/20"><h4 className="text-sm font-bold mb-4 opacity-80">7 ngày qua</h4><ResponsiveContainer width="100%" height="100%"><LineChart data={insightsData.timeline}><CartesianGrid strokeDasharray="3 3" opacity={0.1}/><XAxis dataKey="date" style={{fontSize:10}}/><YAxis style={{fontSize:10}}/><Tooltip contentStyle={{backgroundColor:darkMode?'#1f2937':'#fff',borderRadius:8}}/><Line type="monotone" dataKey="count" stroke="#009FB8" strokeWidth={3} dot={{r:4}}/></LineChart></ResponsiveContainer></div><div className="grid grid-cols-1 md:grid-cols-2 gap-6"><div className="h-64 p-4 rounded-xl border border-gray-500/20"><h4 className="text-sm font-bold mb-4 opacity-80">Top 5</h4><ResponsiveContainer width="100%" height="100%"><BarChart layout="vertical" data={insightsData.topApps}><CartesianGrid strokeDasharray="3 3" opacity={0.1} horizontal={false}/><XAxis type="number" hide/><YAxis dataKey="name" type="category" width={100} style={{fontSize:10}}/><Tooltip cursor={{fill:'transparent'}} contentStyle={{backgroundColor:darkMode?'#1f2937':'#fff',borderRadius:8}}/><Bar dataKey="count" fill="#8884d8" radius={[0,4,4,0]} barSize={20}/></BarChart></ResponsiveContainer></div><div className="h-64 p-4 rounded-xl border border-gray-500/20"><h4 className="text-sm font-bold mb-4 opacity-80">Theo giờ</h4><ResponsiveContainer width="100%" height="100%"><BarChart data={insightsData.hourly}><CartesianGrid strokeDasharray="3 3" opacity={0.1} vertical={false}/><XAxis dataKey="hour" style={{fontSize:10}}/><YAxis style={{fontSize:10}}/><Tooltip cursor={{fill:'transparent'}} contentStyle={{backgroundColor:darkMode?'#1f2937':'#fff',borderRadius:8}}/><Bar dataKey="count" fill="#82ca9d" radius={[4,4,0,0]}/></BarChart></ResponsiveContainer></div></div></div>
             </div>
-          )}
+          </div>
+        )}
 
-          {/* LOGIN MODAL */}
-          {showLoginModal && (
-            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <div className={`rounded-2xl shadow-2xl w-full max-w-xs p-6 border ${modalClass}`}>
-                <div className="flex justify-between items-center mb-6"><h3 className="font-bold">Đăng nhập Admin</h3><button onClick={() => setShowLoginModal(false)}><X size={20}/></button></div>
-                <form onSubmit={handleLogin} className="space-y-4">
-                  <input type="text" placeholder="Username" className={`w-full px-4 py-2 rounded-lg text-sm border ${inputClass}`} value={loginCreds.username} onChange={e => setLoginCreds({...loginCreds, username: e.target.value})} />
-                  <input type="password" placeholder="Password" className={`w-full px-4 py-2 rounded-lg text-sm border ${inputClass}`} value={loginCreds.password} onChange={e => setLoginCreds({...loginCreds, password: e.target.value})} />
-                  {loginError && <p className="text-red-500 text-xs">{loginError}</p>}
-                  <button className="w-full py-2 bg-[#0F2F55] text-white rounded-lg hover:bg-opacity-90">Đăng nhập</button>
-                </form>
-              </div>
-            </div>
-          )}
-          
-          {/* ADD/EDIT MODAL */}
-          {showAddModal && (
-            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <div className={`rounded-2xl shadow-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto border ${modalClass}`}>
-                 <div className="flex justify-between items-center mb-4"><h3 className="font-bold">{formData.id ? 'Sửa' : 'Thêm'} Ứng Dụng</h3><button onClick={() => setShowAddModal(false)}><X size={20}/></button></div>
-                 <form onSubmit={handleSubmit} className="space-y-3">
-                    <input type="text" placeholder="Tên App" className={`w-full px-4 py-3 rounded-xl text-sm border ${inputClass}`} value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required />
-                    <input type="url" placeholder="URL" className={`w-full px-4 py-3 rounded-xl text-sm border ${inputClass}`} value={formData.url} onChange={e => setFormData({...formData, url: e.target.value})} required />
-                    
-                    <div onClick={() => fileInputRef.current?.click()} className={`w-full px-4 py-3 rounded-xl cursor-pointer flex items-center gap-3 border ${inputClass} hover:opacity-80`}>
-                        {formData.icon_url ? <img src={formData.icon_url} className="w-10 h-10 rounded border object-cover"/> : <div className="w-10 h-10 rounded bg-gray-500/20 flex items-center justify-center"><Upload size={20}/></div>}
-                        <div><p className="text-sm font-medium">Tải icon lên</p></div>
-                    </div>
-                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageUpload} />
-                    
-                    <div className={`border-t pt-3 space-y-4 ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-                        <div className="grid grid-cols-[1fr_auto] gap-2 items-center">
-                            <input type="text" placeholder="Nhóm lớn" className={`px-3 py-2 rounded-lg text-sm border ${inputClass}`} value={formData.parent_label} onChange={e => setFormData({...formData, parent_label: e.target.value})} />
-                            <div className="relative w-8 h-8 rounded-full border overflow-hidden cursor-pointer">
-                                <input type="color" className="absolute -top-2 -left-2 w-12 h-12" value={formData.parent_color} onChange={e => setFormData({...formData, parent_color: e.target.value})} />
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-[1fr_auto] gap-2 items-center">
-                            <input type="text" placeholder="Nhóm con" className={`px-3 py-2 rounded-lg text-sm border ${inputClass}`} value={formData.child_label} onChange={e => setFormData({...formData, child_label: e.target.value})} />
-                            <div className="relative w-8 h-8 rounded-full border overflow-hidden cursor-pointer">
-                                <input type="color" className="absolute -top-2 -left-2 w-12 h-12" value={formData.child_color} onChange={e => setFormData({...formData, child_color: e.target.value})} />
-                            </div>
-                        </div>
-                    </div>
-                    <button className="w-full py-3 bg-[#0F2F55] text-white rounded-xl mt-2 hover:bg-opacity-90">Lưu thay đổi</button>
-                 </form>
-              </div>
-            </div>
-          )}
+        {showLoginModal&&(
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"><div className={`rounded-2xl shadow-2xl w-full max-w-xs p-6 border ${modalClass}`}><div className="flex justify-between items-center mb-6"><h3 className="font-bold">Admin</h3><button onClick={()=>setShowLoginModal(false)}><X size={20}/></button></div><form onSubmit={handleLogin} className="space-y-4"><input type="text" placeholder="User" className={`w-full px-4 py-2 rounded-lg text-sm border ${inputClass}`} value={loginCreds.username} onChange={e=>setLoginCreds({...loginCreds,username:e.target.value})}/><input type="password" placeholder="Pass" className={`w-full px-4 py-2 rounded-lg text-sm border ${inputClass}`} value={loginCreds.password} onChange={e=>setLoginCreds({...loginCreds,password:e.target.value})}/>{loginError&&<p className="text-red-500 text-xs">{loginError}</p>}<button className="w-full py-2 bg-[#0F2F55] text-white rounded-lg hover:bg-opacity-90">Login</button></form></div></div>
+        )}
+        {showAddModal&&(
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"><div className={`rounded-2xl shadow-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto border ${modalClass}`}><div className="flex justify-between items-center mb-4"><h3 className="font-bold">{formData.id?'Sửa':'Thêm'} App</h3><button onClick={()=>setShowAddModal(false)}><X size={20}/></button></div><form onSubmit={handleSubmit} className="space-y-3"><input type="text" placeholder="Tên" className={`w-full px-4 py-3 rounded-xl text-sm border ${inputClass}`} value={formData.name} onChange={e=>setFormData({...formData,name:e.target.value})} required/><input type="url" placeholder="URL" className={`w-full px-4 py-3 rounded-xl text-sm border ${inputClass}`} value={formData.url} onChange={e=>setFormData({...formData,url:e.target.value})} required/><div onClick={()=>fileInputRef.current?.click()} className={`w-full px-4 py-3 rounded-xl cursor-pointer flex items-center gap-3 border ${inputClass} hover:opacity-80`}>{formData.icon_url?<img src={formData.icon_url} className="w-10 h-10 rounded border object-cover"/>:<div className="w-10 h-10 rounded bg-gray-500/20 flex items-center justify-center"><Upload size={20}/></div>}<div><p className="text-sm font-medium">Icon</p></div></div><input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageUpload}/><div className={`border-t pt-3 space-y-4 ${darkMode?'border-gray-700':'border-gray-200'}`}><div className="grid grid-cols-[1fr_auto] gap-2 items-center"><input type="text" placeholder="Nhóm lớn" className={`px-3 py-2 rounded-lg text-sm border ${inputClass}`} value={formData.parent_label} onChange={e=>setFormData({...formData,parent_label:e.target.value})}/><div className="relative w-8 h-8 rounded-full border overflow-hidden cursor-pointer"><input type="color" className="absolute -top-2 -left-2 w-12 h-12" value={formData.parent_color} onChange={e=>setFormData({...formData,parent_color:e.target.value})}/></div></div><div className="grid grid-cols-[1fr_auto] gap-2 items-center"><input type="text" placeholder="Nhóm con (cách nhau phẩy)" className={`px-3 py-2 rounded-lg text-sm border ${inputClass}`} value={formData.child_label} onChange={e=>setFormData({...formData,child_label:e.target.value})}/><div className="relative w-8 h-8 rounded-full border overflow-hidden cursor-pointer"><input type="color" className="absolute -top-2 -left-2 w-12 h-12" value={formData.child_color} onChange={e=>setFormData({...formData,child_color:e.target.value})}/></div></div></div><button className="w-full py-3 bg-[#0F2F55] text-white rounded-xl mt-2 hover:bg-opacity-90">Lưu</button></form></div></div>
+        )}
       </div>
     </div>
   );
