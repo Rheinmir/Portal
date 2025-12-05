@@ -11,8 +11,9 @@ export default function App() {
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('darkMode') === 'true');
   
   // Background State
-  const [bgImage, setBgImage] = useState(null); // Actual image being displayed
-  const [serverBg, setServerBg] = useState(null); // Backup of server default
+  const [bgImage, setBgImage] = useState(null);
+  const [serverBg, setServerBg] = useState(null);
+  const [overlayOpacity, setOverlayOpacity] = useState(() => parseFloat(localStorage.getItem('overlayOpacity')) ?? 0.5);
 
   const [sortBy, setSortBy] = useState('default');
   const [formData, setFormData] = useState({ id: null, name: '', url: '', icon_url: '', parent_label: '', parent_color: COLOR_PRESETS[0], child_label: '', child_color: COLOR_PRESETS[1] });
@@ -47,23 +48,13 @@ export default function App() {
       setShortcuts(data.shortcuts || []);
       setLabelColors(data.labelColors || {});
       
-      // BACKGROUND LOGIC:
       const serverDefault = data.appConfig?.default_background || null;
       setServerBg(serverDefault);
 
-      // 1. Try LocalStorage
       const localBg = localStorage.getItem('custom_bg');
-      if (localBg) {
-          setBgImage(localBg);
-      } 
-      // 2. Try Server Default
-      else if (serverDefault) {
-          setBgImage(serverDefault);
-      }
-      // 3. Else null (use CSS default)
-      else {
-          setBgImage(null);
-      }
+      if (localBg) { setBgImage(localBg); } 
+      else if (serverDefault) { setBgImage(serverDefault); }
+      else { setBgImage(null); }
 
     } catch (e) { console.error(e); } finally { setLoading(false); }
   };
@@ -74,47 +65,23 @@ export default function App() {
       const reader = new FileReader();
       reader.onload = async (ev) => {
           const base64 = ev.target.result;
-          setBgImage(base64); // Update UI immediately
-
+          setBgImage(base64);
           if (isAdmin) {
-              // Admin: Save to DB as default for everyone
-              if(confirm("Bạn đang là Admin. Bạn có muốn đặt hình này làm mặc định cho TOÀN BỘ hệ thống không?\n(Người dùng cá nhân vẫn có thể ghi đè bằng ảnh của họ)")) {
-                  try {
-                      await fetch('/api/config/background', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ background_url: base64 })
-                      });
-                      alert("Đã lưu hình nền mặc định xuống Server!");
-                  } catch(err) { alert("Lỗi lưu server"); }
-              } else {
-                  // Admin chose NO, so save locally only
-                  localStorage.setItem('custom_bg', base64);
-              }
-          } else {
-              // Guest: Save to LocalStorage
-              localStorage.setItem('custom_bg', base64);
-          }
+              if(confirm("Bạn đang là Admin. Đặt hình này làm mặc định cho toàn hệ thống?")) {
+                  try { await fetch('/api/config/background', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ background_url: base64 }) }); alert("Đã lưu Server!"); } catch(err) {}
+              } else { localStorage.setItem('custom_bg', base64); }
+          } else { localStorage.setItem('custom_bg', base64); }
       };
       reader.readAsDataURL(file);
   };
 
-  const handleResetBg = () => {
-      localStorage.removeItem('custom_bg');
-      setBgImage(serverBg); // Revert to server default
-      alert("Đã xóa hình nền cá nhân. Quay về mặc định.");
-  };
-
-  // ... (Other handlers: handleSubmit, handleDelete, handleToggleFavorite, etc. kept similar for brevity)
+  const handleResetBg = () => { localStorage.removeItem('custom_bg'); setBgImage(serverBg); alert("Đã đặt lại hình nền."); };
   const resetForm = () => setFormData({ id: null, name: '', url: '', icon_url: '', parent_label: '', parent_color: COLOR_PRESETS[0], child_label: '', child_color: COLOR_PRESETS[1] });
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.name.trim() || !formData.url.trim()) return alert('Thiếu tên hoặc URL');
+    if (!formData.name.trim() || !formData.url.trim()) return alert('Thiếu tên/URL');
     try {
-      const res = await fetch(formData.id ? `/api/shortcuts/${formData.id}` : '/api/shortcuts', {
-        method: formData.id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
-      });
+      const res = await fetch(formData.id ? `/api/shortcuts/${formData.id}` : '/api/shortcuts', { method: formData.id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formData) });
       if(res.ok) { await fetchData(); setShowAddModal(false); resetForm(); }
     } catch(e) { alert('Lỗi'); }
   };
@@ -124,21 +91,21 @@ export default function App() {
   const handleEdit = (item, e) => { e.stopPropagation(); setFormData({...item, icon_url: item.icon_url || ''}); setShowAddModal(true); };
   const handleLogin = (e) => { e.preventDefault(); if(loginCreds.username==='admin' && loginCreds.password==='miniappadmin'){ setIsAdmin(true); setShowLoginModal(false); } else setLoginError('Sai thông tin'); };
   const handleImageUpload = (e) => { const f=e.target.files[0]; if(f) { const r=new FileReader(); r.onload=(ev)=>setFormData(p=>({...p, icon_url:ev.target.result})); r.readAsDataURL(f); } };
+  
+  const handleExportData = () => {
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify({ version: 1, timestamp: new Date().toISOString(), shortcuts: shortcuts.map(({id,...r})=>r), labels: Object.entries(labelColors).map(([n,c])=>({name:n, color_class:c})) }));
+    const a = document.createElement('a'); a.href = dataStr; a.download = `backup_${new Date().toISOString().slice(0,10)}.json`; document.body.appendChild(a); a.click(); a.remove();
+  };
+  const handleImportData = (e) => { const f=e.target.files[0]; if(f) { const r=new FileReader(); r.onload=async(ev)=>{ try { await fetch('/api/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(JSON.parse(ev.target.result)) }); alert("Import OK!"); fetchData(); } catch(x) { alert("Lỗi import"); } e.target.value=null; }; r.readAsText(f); }};
 
-  // Filters
   const uniqueParents = useMemo(() => [...new Set(shortcuts.map(s => s.parent_label).filter(Boolean))].sort(), [shortcuts]);
   const uniqueChildren = useMemo(() => [...new Set(shortcuts.map(s => s.child_label).filter(Boolean))].sort(), [shortcuts]);
   const filteredShortcuts = useMemo(() => {
-    let res = shortcuts.filter(i => 
-        (!searchTerm || i.name.toLowerCase().includes(searchTerm.toLowerCase())) && 
-        (!activeParentFilter || i.parent_label === activeParentFilter) && 
-        (!activeChildFilter || i.child_label === activeChildFilter)
-    );
+    let res = shortcuts.filter(i => (!searchTerm || i.name.toLowerCase().includes(searchTerm.toLowerCase())) && (!activeParentFilter || i.parent_label === activeParentFilter) && (!activeChildFilter || i.child_label === activeChildFilter));
     res.sort((a,b) => (b.favorite - a.favorite) || (sortBy==='alpha'?a.name.localeCompare(b.name) : 0));
     return res;
   }, [shortcuts, searchTerm, activeParentFilter, activeChildFilter, sortBy]);
 
-  // Styles
   const bgClass = darkMode ? 'bg-gray-900 text-gray-100' : 'bg-[#F4F4F4] text-[#2C2C2C]';
   const cardClass = darkMode ? 'bg-gray-800 border-gray-700 hover:border-blue-500' : 'bg-white border-[#D8D8D8] hover:border-[#009FB8]';
   const inputClass = darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-[#D8D8D8] text-[#2C2C2C]';
@@ -147,17 +114,12 @@ export default function App() {
   if (loading) return <div className={`min-h-screen flex items-center justify-center ${bgClass}`}><Activity className="w-8 h-8 animate-spin"/></div>;
 
   return (
-    <div 
-        className={`min-h-screen font-sans transition-all duration-300 bg-cover bg-center bg-no-repeat bg-fixed ${bgClass}`}
-        style={bgImage ? { backgroundImage: `url(${bgImage})`, backgroundSize: 'cover' } : {}}
-    >
-      {/* Overlay to ensure text readability if bg is busy */}
-      <div className={`min-h-screen w-full ${bgImage ? (darkMode ? 'bg-black/60' : 'bg-white/40 backdrop-blur-sm') : ''}`}>
+    <div className={`min-h-screen font-sans transition-all duration-300 bg-cover bg-center bg-no-repeat bg-fixed ${bgClass}`} style={bgImage ? { backgroundImage: `url(${bgImage})` } : {}}>
+      <div className={`min-h-screen w-full transition-colors duration-300`} style={{ backgroundColor: bgImage ? (darkMode ? `rgba(0,0,0,${overlayOpacity})` : `rgba(255,255,255,${overlayOpacity})`) : '' }}>
           
           {/* HEADER */}
           <div className="sticky top-0 z-30 w-full flex flex-col pt-4 px-4 gap-2 pointer-events-none">
             <div className="pointer-events-auto w-full max-w-5xl mx-auto flex items-center justify-between gap-3">
-              {/* Search */}
               <div className="flex-1 flex items-center gap-2 min-w-0">
                  <div className="relative group w-full max-w-sm transition-all">
                     <Search className="absolute inset-y-0 left-0 pl-3 h-full w-7 text-gray-400" />
@@ -170,38 +132,48 @@ export default function App() {
                  </div>
               </div>
 
-              {/* Right Controls */}
-              <div className="flex items-center gap-2 shrink-0">
-                 <button onClick={() => setDarkMode(!darkMode)} className={`p-2 rounded-full border shadow-sm ${inputClass} ${bgImage ? 'bg-opacity-80' : ''}`}>
-                    {darkMode ? <Sun size={18} className="text-yellow-400"/> : <Moon size={18} className="text-gray-600"/>}
-                 </button>
-                 
-                 {/* Settings / Admin Panel */}
-                 <div className="opacity-0 hover:opacity-100 transition-opacity duration-300">
-                     {isAdmin ? (
-                        <div className={`flex items-center gap-2 px-2 py-1 rounded-full border shadow-lg ${modalClass} bg-opacity-90 backdrop-blur`}>
-                           <button onClick={() => { resetForm(); setShowAddModal(true); }} className="p-1.5 bg-[#0F2F55] text-white rounded-full hover:scale-110"><Plus size={16}/></button>
-                           {/* BG Upload */}
-                           <button onClick={() => bgInputRef.current?.click()} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-purple-500" title="Đổi hình nền hệ thống"><ImageIcon size={16}/></button>
-                           <input type="file" ref={bgInputRef} className="hidden" accept="image/*" onChange={handleBgUpload} />
-                           
-                           <div className="w-px h-4 bg-gray-300 mx-1"></div>
-                           <button onClick={() => setIsAdmin(false)} className="p-1.5 hover:bg-red-100 dark:hover:bg-red-900 rounded-full text-red-500"><LogOut size={16}/></button>
-                        </div>
-                     ) : (
-                        <div className={`flex items-center gap-1 p-1 rounded-full border shadow-lg ${inputClass} bg-opacity-80 backdrop-blur`}>
-                            {/* Guest BG Upload */}
-                            <button onClick={() => bgInputRef.current?.click()} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full" title="Đổi hình nền cá nhân"><ImageIcon size={16}/></button>
-                            <input type="file" ref={bgInputRef} className="hidden" accept="image/*" onChange={handleBgUpload} />
-                            
-                            {/* Reset BG */}
-                            {localStorage.getItem('custom_bg') && (
-                                <button onClick={handleResetBg} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-orange-500" title="Đặt lại hình nền gốc"><RotateCcw size={16}/></button>
-                            )}
+              {/* RIGHT: Hidden Control Panel (Hover to reveal) */}
+              <div className="flex items-center justify-end">
+                 <div className="group/menu flex items-center gap-2 p-2 rounded-full hover:bg-white/20 hover:backdrop-blur-md transition-all">
+                     
+                     {/* The Hidden Controls */}
+                     <div className="opacity-0 group-hover/menu:opacity-100 flex items-center gap-2 transition-opacity duration-300">
+                        {/* Opacity Slider */}
+                        {bgImage && (
+                            <div className="flex items-center gap-1 mr-2 bg-black/20 rounded-full px-2 py-1 backdrop-blur-sm">
+                                <span className="text-[10px] text-white/90 font-bold">BG</span>
+                                <input type="range" min="0" max="0.9" step="0.1" value={overlayOpacity} onChange={(e) => { const val = parseFloat(e.target.value); setOverlayOpacity(val); localStorage.setItem('overlayOpacity', val); }} className="w-16 h-1 accent-[#009FB8] cursor-pointer" />
+                            </div>
+                        )}
 
-                            <button onClick={() => setShowLoginModal(true)} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"><Settings size={18} /></button>
-                        </div>
-                     )}
+                        <button onClick={() => setDarkMode(!darkMode)} className={`p-2 rounded-full border shadow-sm ${inputClass} ${bgImage ? 'bg-opacity-80' : ''}`}>
+                            {darkMode ? <Sun size={18} className="text-yellow-400"/> : <Moon size={18} className="text-gray-600"/>}
+                        </button>
+
+                        {isAdmin ? (
+                            <div className={`flex items-center gap-2 px-2 py-1 rounded-full border shadow-lg ${modalClass} bg-opacity-90 backdrop-blur`}>
+                               <button onClick={() => { resetForm(); setShowAddModal(true); }} className="p-1.5 bg-[#0F2F55] text-white rounded-full hover:scale-110"><Plus size={16}/></button>
+                               <button onClick={handleExportData} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-blue-500" title="Xuất"><Download size={16}/></button>
+                               <button onClick={() => importInputRef.current?.click()} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-green-500" title="Nhập"><FileUp size={16}/></button>
+                               <input type="file" ref={importInputRef} className="hidden" accept=".json" onChange={handleImportData} />
+                               <button onClick={() => bgInputRef.current?.click()} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-purple-500" title="Đổi BG"><ImageIcon size={16}/></button>
+                               <input type="file" ref={bgInputRef} className="hidden" accept="image/*" onChange={handleBgUpload} />
+                               <div className="w-px h-4 bg-gray-300 mx-1"></div>
+                               <button onClick={() => setIsAdmin(false)} className="p-1.5 hover:bg-red-100 dark:hover:bg-red-900 rounded-full text-red-500"><LogOut size={16}/></button>
+                            </div>
+                         ) : (
+                            <div className={`flex items-center gap-1 p-1 rounded-full border shadow-lg ${inputClass} bg-opacity-80 backdrop-blur`}>
+                                <button onClick={() => bgInputRef.current?.click()} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"><ImageIcon size={16}/></button>
+                                <input type="file" ref={bgInputRef} className="hidden" accept="image/*" onChange={handleBgUpload} />
+                                {localStorage.getItem('custom_bg') && <button onClick={handleResetBg} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-orange-500"><RotateCcw size={16}/></button>}
+                                <button onClick={() => setShowLoginModal(true)} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"><Settings size={18} /></button>
+                            </div>
+                         )}
+                     </div>
+                     {/* Subtle Trigger Icon (visible when idle) */}
+                     <div className="w-8 h-8 flex items-center justify-center group-hover/menu:hidden text-gray-400/50">
+                        <Settings size={20} className="animate-pulse" />
+                     </div>
                  </div>
               </div>
             </div>

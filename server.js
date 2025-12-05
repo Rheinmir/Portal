@@ -120,6 +120,24 @@ app.post('/api/favorite/:id', (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+app.post('/api/import', (req, res) => {
+  const { shortcuts, labels } = req.body || {};
+  const insert = db.prepare(`INSERT INTO shortcuts (name, url, icon_url, parent_label, child_label, clicks, favorite) VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(name, url) DO UPDATE SET icon_url=excluded.icon_url, parent_label=excluded.parent_label, child_label=excluded.child_label`);
+  const upsert = db.prepare(`INSERT OR REPLACE INTO label_colors (name, color_class) VALUES (?, ?)`);
+  try {
+    db.transaction(() => {
+      if (Array.isArray(shortcuts)) shortcuts.forEach(s => {
+        if (!s?.name || !s?.url) return;
+        try { if(new URL(s.url).protocol.startsWith('http')) insert.run(s.name.trim(), s.url.trim(), s.icon_url||'', s.parent_label||'', s.child_label||'', Number(s.clicks||0), Number(s.favorite||0)); } catch {}
+      });
+      if (Array.isArray(labels)) labels.forEach(l => { if(l?.name) upsert.run(l.name.trim(), l.color_class||''); });
+      cleanupOrphanLabels();
+    })();
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get('*', (req, res) => {
     if (fs.existsSync(path.join(__dirname, 'dist', 'index.html'))) {
         res.sendFile(path.join(__dirname, 'dist', 'index.html'));
