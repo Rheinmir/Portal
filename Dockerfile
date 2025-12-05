@@ -1,27 +1,17 @@
-
-# ===========================
-# 1) BUILD FRONTEND
-# ===========================
-FROM node:18-slim AS build
-RUN apt-get update && apt-get install -y --no-install-recommends python3 build-essential && rm -rf /var/lib/apt/lists/*
+FROM node:18-alpine AS build
 WORKDIR /app
 COPY package*.json ./
 RUN npm install
 COPY . .
 RUN npm run build
 
-# ===========================
-# 2) RUNTIME (Backend)
-# ===========================
-FROM node:18-slim
+FROM node:18-alpine
 WORKDIR /app
 ENV NODE_ENV=production
-# Libvips for Sharp
-RUN apt-get update && apt-get install -y --no-install-recommends libvips && rm -rf /var/lib/apt/lists/*
 COPY package*.json ./
-RUN npm install --omit=dev
+RUN npm install --production
 COPY --from=build /app/dist ./dist
-COPY server.js ./server.js
+COPY server.js .
 RUN mkdir -p /app/data
 EXPOSE 5464
 CMD ["node", "server.js"]
