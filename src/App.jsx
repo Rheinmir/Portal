@@ -119,9 +119,10 @@ export default function App() {
           
           {/* HEADER */}
           <div className="sticky top-0 z-30 w-full flex flex-col pt-4 px-4 gap-2 pointer-events-none">
-            <div className="pointer-events-auto w-full max-w-5xl mx-auto flex items-center justify-between gap-3">
+            {/* Search Bar - Centered */}
+            <div className="pointer-events-auto w-full max-w-2xl mx-auto flex items-center justify-center gap-3">
               <div className="flex-1 flex items-center gap-2 min-w-0">
-                 <div className="relative group w-full max-w-sm transition-all">
+                 <div className="relative group w-full max-w-lg mx-auto transition-all">
                     <Search className="absolute inset-y-0 left-0 pl-3 h-full w-7 text-gray-400" />
                     <input type="text" className={`block w-full pl-10 pr-3 py-2 border rounded-full text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-[#009FB8] ${inputClass} ${bgImage ? 'bg-opacity-80 backdrop-blur-md' : ''}`} placeholder="Tìm kiếm..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                  </div>
@@ -129,51 +130,6 @@ export default function App() {
                  <div className="hidden sm:flex items-center gap-1 bg-gray-200/50 dark:bg-gray-800/50 rounded-full p-1 backdrop-blur-sm">
                     <button onClick={() => setSortBy('default')} className={`p-1.5 rounded-full text-xs ${sortBy === 'default' ? 'bg-white dark:bg-gray-700 shadow' : 'opacity-50'}`}><List size={14}/></button>
                     <button onClick={() => setSortBy('alpha')} className={`p-1.5 rounded-full text-xs ${sortBy === 'alpha' ? 'bg-white dark:bg-gray-700 shadow' : 'opacity-50'}`}>Aa</button>
-                 </div>
-              </div>
-
-              {/* RIGHT: Hidden Control Panel (Hover to reveal) */}
-              <div className="flex items-center justify-end">
-                 <div className="group/menu flex items-center gap-2 p-2 rounded-full hover:bg-white/20 hover:backdrop-blur-md transition-all">
-                     
-                     {/* The Hidden Controls */}
-                     <div className="opacity-0 group-hover/menu:opacity-100 flex items-center gap-2 transition-opacity duration-300">
-                        {/* Opacity Slider */}
-                        {bgImage && (
-                            <div className="flex items-center gap-1 mr-2 bg-black/20 rounded-full px-2 py-1 backdrop-blur-sm">
-                                <span className="text-[10px] text-white/90 font-bold">BG</span>
-                                <input type="range" min="0" max="0.9" step="0.1" value={overlayOpacity} onChange={(e) => { const val = parseFloat(e.target.value); setOverlayOpacity(val); localStorage.setItem('overlayOpacity', val); }} className="w-16 h-1 accent-[#009FB8] cursor-pointer" />
-                            </div>
-                        )}
-
-                        <button onClick={() => setDarkMode(!darkMode)} className={`p-2 rounded-full border shadow-sm ${inputClass} ${bgImage ? 'bg-opacity-80' : ''}`}>
-                            {darkMode ? <Sun size={18} className="text-yellow-400"/> : <Moon size={18} className="text-gray-600"/>}
-                        </button>
-
-                        {isAdmin ? (
-                            <div className={`flex items-center gap-2 px-2 py-1 rounded-full border shadow-lg ${modalClass} bg-opacity-90 backdrop-blur`}>
-                               <button onClick={() => { resetForm(); setShowAddModal(true); }} className="p-1.5 bg-[#0F2F55] text-white rounded-full hover:scale-110"><Plus size={16}/></button>
-                               <button onClick={handleExportData} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-blue-500" title="Xuất"><Download size={16}/></button>
-                               <button onClick={() => importInputRef.current?.click()} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-green-500" title="Nhập"><FileUp size={16}/></button>
-                               <input type="file" ref={importInputRef} className="hidden" accept=".json" onChange={handleImportData} />
-                               <button onClick={() => bgInputRef.current?.click()} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-purple-500" title="Đổi BG"><ImageIcon size={16}/></button>
-                               <input type="file" ref={bgInputRef} className="hidden" accept="image/*" onChange={handleBgUpload} />
-                               <div className="w-px h-4 bg-gray-300 mx-1"></div>
-                               <button onClick={() => setIsAdmin(false)} className="p-1.5 hover:bg-red-100 dark:hover:bg-red-900 rounded-full text-red-500"><LogOut size={16}/></button>
-                            </div>
-                         ) : (
-                            <div className={`flex items-center gap-1 p-1 rounded-full border shadow-lg ${inputClass} bg-opacity-80 backdrop-blur`}>
-                                <button onClick={() => bgInputRef.current?.click()} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"><ImageIcon size={16}/></button>
-                                <input type="file" ref={bgInputRef} className="hidden" accept="image/*" onChange={handleBgUpload} />
-                                {localStorage.getItem('custom_bg') && <button onClick={handleResetBg} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-orange-500"><RotateCcw size={16}/></button>}
-                                <button onClick={() => setShowLoginModal(true)} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"><Settings size={18} /></button>
-                            </div>
-                         )}
-                     </div>
-                     {/* Subtle Trigger Icon (visible when idle) */}
-                     <div className="w-8 h-8 flex items-center justify-center group-hover/menu:hidden text-gray-400/50">
-                        <Settings size={20} className="animate-pulse" />
-                     </div>
                  </div>
               </div>
             </div>
@@ -215,7 +171,7 @@ export default function App() {
                       {item.icon_url ? <img src={item.icon_url} className="w-full h-full object-cover" /> : <span>{item.name.charAt(0).toUpperCase()}</span>}
                     </div>
                     
-                    <span className={`text-sm font-medium text-center truncate w-32 px-1 leading-tight ${darkMode ? 'text-gray-200' : 'text-[#2C2C2C] font-semibold'}`} style={{textShadow: bgImage ? '0 1px 2px rgba(0,0,0,0.5)' : 'none'}}>{item.name}</span>
+                    <span className={`text-sm text-center truncate w-32 px-1 leading-tight ${darkMode ? 'text-gray-200 font-medium' : 'text-slate-600 font-medium'}`} style={{textShadow: bgImage ? '0 1px 2px rgba(0,0,0,0.5)' : 'none'}}>{item.name}</span>
                     
                     <div className="flex flex-wrap justify-center gap-1 mt-1 px-1">
                         {item.parent_label && <span className="text-[9px] px-1.5 py-0.5 rounded-full text-white truncate max-w-[70px] shadow-sm" style={{ background: labelColors[item.parent_label] || '#9CA3AF' }}>{item.parent_label}</span>}
@@ -233,6 +189,52 @@ export default function App() {
                   </div>
                 )}
             </div>
+          </div>
+
+          {/* SETTINGS DOCK - Bottom Right */}
+          <div className="fixed bottom-6 right-6 z-50 pointer-events-auto">
+             <div className="group/menu flex items-center justify-end gap-2 p-2 rounded-full hover:bg-white/20 hover:backdrop-blur-md transition-all">
+                 
+                 {/* Hidden Controls */}
+                 <div className="opacity-0 group-hover/menu:opacity-100 flex items-center gap-2 transition-opacity duration-300">
+                    {/* Opacity */}
+                    {bgImage && (
+                        <div className="flex items-center gap-1 mr-2 bg-black/40 rounded-full px-2 py-1 backdrop-blur-sm">
+                            <span className="text-[10px] text-white/90 font-bold">BG</span>
+                            <input type="range" min="0" max="0.9" step="0.1" value={overlayOpacity} onChange={(e) => { const val = parseFloat(e.target.value); setOverlayOpacity(val); localStorage.setItem('overlayOpacity', val); }} className="w-16 h-1 accent-[#009FB8] cursor-pointer" />
+                        </div>
+                    )}
+
+                    <button onClick={() => setDarkMode(!darkMode)} className={`p-2 rounded-full border shadow-sm ${inputClass} ${bgImage ? 'bg-opacity-80' : ''}`}>
+                        {darkMode ? <Sun size={18} className="text-yellow-400"/> : <Moon size={18} className="text-gray-600"/>}
+                    </button>
+
+                    {isAdmin ? (
+                        <div className={`flex items-center gap-2 px-2 py-1 rounded-full border shadow-lg ${modalClass} bg-opacity-90 backdrop-blur`}>
+                           <button onClick={() => { resetForm(); setShowAddModal(true); }} className="p-1.5 bg-[#0F2F55] text-white rounded-full hover:scale-110"><Plus size={16}/></button>
+                           <button onClick={handleExportData} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-blue-500" title="Xuất"><Download size={16}/></button>
+                           <button onClick={() => importInputRef.current?.click()} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-green-500" title="Nhập"><FileUp size={16}/></button>
+                           <input type="file" ref={importInputRef} className="hidden" accept=".json" onChange={handleImportData} />
+                           <button onClick={() => bgInputRef.current?.click()} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-purple-500" title="Đổi BG"><ImageIcon size={16}/></button>
+                           <input type="file" ref={bgInputRef} className="hidden" accept="image/*" onChange={handleBgUpload} />
+                           <div className="w-px h-4 bg-gray-300 mx-1"></div>
+                           <button onClick={() => setIsAdmin(false)} className="p-1.5 hover:bg-red-100 dark:hover:bg-red-900 rounded-full text-red-500"><LogOut size={16}/></button>
+                        </div>
+                     ) : (
+                        <div className={`flex items-center gap-1 p-1 rounded-full border shadow-lg ${inputClass} bg-opacity-80 backdrop-blur`}>
+                            <button onClick={() => bgInputRef.current?.click()} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"><ImageIcon size={16}/></button>
+                            <input type="file" ref={bgInputRef} className="hidden" accept="image/*" onChange={handleBgUpload} />
+                            {localStorage.getItem('custom_bg') && <button onClick={handleResetBg} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-orange-500"><RotateCcw size={16}/></button>}
+                            <button onClick={() => setShowLoginModal(true)} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"><Settings size={18} /></button>
+                        </div>
+                     )}
+                 </div>
+                 
+                 {/* Trigger Icon */}
+                 <div className="w-10 h-10 flex items-center justify-center bg-white/20 backdrop-blur-md rounded-full border border-white/30 text-white shadow-lg cursor-pointer group-hover/menu:hidden">
+                    <Settings size={20} className="animate-spin-slow" />
+                 </div>
+             </div>
           </div>
 
           {/* Login Modal */}
