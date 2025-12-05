@@ -1,4 +1,4 @@
-import React,{useState,useEffect,useRef,useMemo}from'react';import{Save,Trash2,Plus,Search,Activity,Copy,Check,Settings,LogOut,X,Filter,Tag,Upload,Download,FileUp,Pencil,Star,Moon,Sun,LayoutGrid,List,Image as ImageIcon,RotateCcw,BarChart as ChartIcon,Palette,Type}from'lucide-react';import{BarChart,Bar,XAxis,YAxis,Tooltip,ResponsiveContainer,CartesianGrid,LineChart,Line}from'recharts';
+import React,{useState,useEffect,useRef,useMemo}from'react';import{Save,Trash2,Plus,Search,Activity,Copy,Check,Settings,LogOut,X,Filter,Tag,Upload,Download,FileUp,Pencil,Star,Moon,Sun,LayoutGrid,List,Image as ImageIcon,RotateCcw,BarChart as ChartIcon,Palette,Type}from'lucide-react';
 const COLOR_PRESETS=['#0A1A2F','#009FB8','#6D28D9','#BE123C','#059669','#C2410C','#475569'];const DEFAULT_LIGHT_TEXT='#2C2C2C',DEFAULT_DARK_TEXT='#E2E8F0';
 const getGradientStyle=h=>h?{background:`linear-gradient(135deg,${h},${h}dd)`}:{};
 const getContrastYIQ=(hex)=>{if(!hex)return'#fff';const h=hex.replace('#','');const r=parseInt(h.substr(0,2),16),g=parseInt(h.substr(2,2),16),b=parseInt(h.substr(4,2),16);return(((r*299)+(g*587)+(b*114))/1000)>=128?'#000':'#fff'};
@@ -75,11 +75,10 @@ export default function App(){
               {i.parent_label&&<span className="text-[8px] px-1 py-0.5 rounded-full text-white truncate max-w-[60px] shadow-sm mb-0.5" style={{background:labelColors[i.parent_label]||'#9CA3AF',color:getContrastYIQ(labelColors[i.parent_label]||'#9CA3AF')}}>{i.parent_label}</span>}
               {(i.child_label||'').split(',').filter(Boolean).map(t=><span key={t} className={`text-[8px] px-1 py-0.5 rounded-full border truncate max-w-[60px] bg-white/50 backdrop-blur-sm ${darkMode?'border-gray-600':'border-gray-300'}`} style={{borderColor:labelColors[t?.trim()],color:labelColors[t?.trim()]||(darkMode?'#ddd':'#333')}}>{t.trim()}</span>)}
             </div>
-            {i.isLocal&&<div className="absolute bottom-8 right-2 bg-blue-500/80 text-white text-[8px] px-1 rounded">LOCAL</div>}
           </div>))}
           <div className="flex flex-col items-center w-full max-w-[100px] cursor-pointer group" onClick={()=>{resetForm();setShowAddModal(true)}}>
-            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all mb-2 backdrop-blur-sm bg-white/20 dark:bg-black/20 hover:bg-green-500/20`}><Plus size={24} className="opacity-50"/></div>
-            <span className="text-xs font-medium opacity-50">Thêm App</span>
+            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all mb-2 backdrop-blur-sm bg-white/20 dark:bg-black/20 hover:bg-green-500/20`}><Plus size={24} className="opacity-50 font-light"/></div>
+            <span className="text-xs font-light opacity-50">Thêm App</span>
           </div>
         </div></div>
 
@@ -112,7 +111,14 @@ export default function App(){
             <div className={`rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6 ${modalClass}`}>
               <div className="flex justify-between items-center mb-6"><div className="flex items-center gap-4"><h3 className="font-bold text-xl flex items-center gap-2"><ChartIcon className="text-orange-500"/> Phân tích</h3><button onClick={handleExportStats} className="text-xs flex items-center gap-1 text-blue-500 hover:underline bg-blue-500/10 px-2 py-1 rounded"><Download size={12}/> Xuất CSV đầy đủ</button></div><button onClick={()=>setShowInsightsModal(false)}><X size={24}/></button></div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6"><div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20"><p className="text-sm opacity-70">Tổng Click</p><p className="text-3xl font-bold text-blue-500">{insightsData.totalClicks}</p></div><div className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/20"><p className="text-sm opacity-70">Top 1 App</p><p className="text-xl font-bold text-purple-500 truncate">{insightsData.topApps[0]?.name||'N/A'}</p></div></div>
-              <div className="space-y-6"><div className="h-64 w-full p-4 rounded-xl border border-gray-500/20"><h4 className="text-sm font-bold mb-4 opacity-80">7 ngày qua</h4><ResponsiveContainer width="100%" height="100%"><LineChart data={insightsData.timeline}><CartesianGrid strokeDasharray="3 3" opacity={0.1}/><XAxis dataKey="date" style={{fontSize:10}}/><YAxis style={{fontSize:10}}/><Tooltip contentStyle={{backgroundColor:darkMode?'#1f2937':'#fff',borderRadius:8}}/><Line type="monotone" dataKey="count" stroke="#009FB8" strokeWidth={3} dot={{r:4}}/></LineChart></ResponsiveContainer></div><div className="grid grid-cols-1 md:grid-cols-2 gap-6"><div className="h-64 p-4 rounded-xl border border-gray-500/20"><h4 className="text-sm font-bold mb-4 opacity-80">Top 5</h4><ResponsiveContainer width="100%" height="100%"><BarChart layout="vertical" data={insightsData.topApps}><CartesianGrid strokeDasharray="3 3" opacity={0.1} horizontal={false}/><XAxis type="number" hide/><YAxis dataKey="name" type="category" width={100} style={{fontSize:10}}/><Tooltip cursor={{fill:'transparent'}} contentStyle={{backgroundColor:darkMode?'#1f2937':'#fff',borderRadius:8}}/><Bar dataKey="count" fill="#8884d8" radius={[0,4,4,0]} barSize={20}/></BarChart></ResponsiveContainer></div><div className="h-64 p-4 rounded-xl border border-gray-500/20"><h4 className="text-sm font-bold mb-4 opacity-80">Theo giờ</h4><ResponsiveContainer width="100%" height="100%"><BarChart data={insightsData.hourly}><CartesianGrid strokeDasharray="3 3" opacity={0.1} vertical={false}/><XAxis dataKey="hour" style={{fontSize:10}}/><YAxis style={{fontSize:10}}/><Tooltip cursor={{fill:'transparent'}} contentStyle={{backgroundColor:darkMode?'#1f2937':'#fff',borderRadius:8}}/><Bar dataKey="count" fill="#82ca9d" radius={[4,4,0,0]}/></BarChart></ResponsiveContainer></div></div></div>
+              <div className="space-y-6">
+                <div className="p-4 rounded-xl border border-gray-500/20"><h4 className="text-sm font-bold mb-4 opacity-80">Top 5 Ứng Dụng (Thống kê đơn giản)</h4>
+                  <div className="flex flex-col gap-2">{insightsData.topApps.map((a,i)=>(<div key={i} className="flex items-center gap-2"><div className="w-24 truncate text-xs opacity-80">{a.name}</div><div className="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden"><div className="h-full bg-[#009FB8]" style={{width:`${(a.count/Math.max(...insightsData.topApps.map(x=>x.count),1))*100}%`}}/></div><div className="text-xs font-bold w-8 text-right">{a.count}</div></div>))}</div>
+                </div>
+                <div className="p-4 rounded-xl border border-gray-500/20"><h4 className="text-sm font-bold mb-4 opacity-80">Hoạt động gần đây (7 ngày)</h4>
+                   <div className="flex items-end gap-1 h-32">{insightsData.timeline.map((d,i)=>(<div key={i} className="flex-1 flex flex-col items-center gap-1"><div className="w-full bg-blue-400/50 rounded-t" style={{height:`${Math.max((d.count/Math.max(...insightsData.timeline.map(x=>x.count),1))*100, 5)}%`}}></div><div className="text-[8px] opacity-60 -rotate-45 mt-2">{d.d.slice(5)}</div></div>))}</div>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -122,23 +128,8 @@ export default function App(){
         )}
         {showAddModal&&(
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"><div className={`rounded-2xl shadow-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto border ${modalClass}`}><div className="flex justify-between items-center mb-4"><h3 className="font-bold">{formData.id?'Sửa':'Thêm'} App</h3><button onClick={()=>setShowAddModal(false)}><X size={20}/></button></div><form onSubmit={handleSubmit} className="space-y-3"><input type="text" placeholder="Tên" className={`w-full px-4 py-3 rounded-xl text-sm border ${inputClass}`} value={formData.name} onChange={e=>setFormData({...formData,name:e.target.value})} required/><input type="url" placeholder="URL" className={`w-full px-4 py-3 rounded-xl text-sm border ${inputClass}`} value={formData.url} onChange={e=>setFormData({...formData,url:e.target.value})} required/>
-          
-          {/* Upload Area */}
-          <div onClick={() => fileInputRef.current?.click()} className={`w-full px-4 py-3 rounded-xl cursor-pointer flex items-center gap-3 border ${inputClass} hover:opacity-80`}>
-            {formData.icon_url ? <img src={formData.icon_url} className="w-10 h-10 rounded border object-cover"/> : <div className="w-10 h-10 rounded bg-gray-500/20 flex items-center justify-center"><Upload size={20}/></div>}
-            <div className="flex-1"><p className="text-sm font-medium">Tải icon lên</p></div>
-          </div>
-          <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageUpload} />
-          
-          {/* OR URL */}
-          <input 
-            type="text" 
-            placeholder="Hoặc dán link ảnh (https://...)" 
-            className={`w-full px-4 py-2 rounded-xl text-sm border ${inputClass}`} 
-            value={formData.icon_url?.startsWith('data:') ? '' : formData.icon_url} 
-            onChange={e => setFormData({...formData, icon_url: e.target.value})} 
-          />
-
+          <div onClick={() => fileInputRef.current?.click()} className={`w-full px-4 py-3 rounded-xl cursor-pointer flex items-center gap-3 border ${inputClass} hover:opacity-80`}>{formData.icon_url?<img src={formData.icon_url} className="w-10 h-10 rounded border object-cover"/>:<div className="w-10 h-10 rounded bg-gray-500/20 flex items-center justify-center"><Upload size={20}/></div>}<div><p className="text-sm font-medium">Tải icon lên</p></div></div><input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageUpload}/>
+          <input type="text" placeholder="Hoặc dán link ảnh (https://...)" className={`w-full px-4 py-2 rounded-xl text-sm border ${inputClass}`} value={formData.icon_url?.startsWith('data:')?'':formData.icon_url} onChange={e=>setFormData({...formData,icon_url:e.target.value})}/>
           <div className={`border-t pt-3 space-y-4 ${darkMode?'border-gray-700':'border-gray-200'}`}><div className="grid grid-cols-[1fr_auto] gap-2 items-center"><input type="text" placeholder="Nhóm lớn" className={`px-3 py-2 rounded-lg text-sm border ${inputClass}`} value={formData.parent_label} onChange={e=>setFormData({...formData,parent_label:e.target.value})}/><div className="relative w-8 h-8 rounded-full border overflow-hidden cursor-pointer"><input type="color" className="absolute -top-2 -left-2 w-12 h-12" value={formData.parent_color} onChange={e=>setFormData({...formData,parent_color:e.target.value})}/></div></div><div className="grid grid-cols-[1fr_auto] gap-2 items-center"><input type="text" placeholder="Nhóm con (cách nhau phẩy)" className={`px-3 py-2 rounded-lg text-sm border ${inputClass}`} value={formData.child_label} onChange={e=>setFormData({...formData,child_label:e.target.value})}/><div className="relative w-8 h-8 rounded-full border overflow-hidden cursor-pointer"><input type="color" className="absolute -top-2 -left-2 w-12 h-12" value={formData.child_color} onChange={e=>setFormData({...formData,child_color:e.target.value})}/></div></div></div><button className="w-full py-3 bg-[#0F2F55] text-white rounded-xl mt-2 hover:bg-opacity-90">Lưu</button></form></div></div>
         )}
       </div>
