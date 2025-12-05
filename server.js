@@ -1,4 +1,3 @@
-
 import express from 'express';
 import Database from 'better-sqlite3';
 import cors from 'cors';
@@ -8,366 +7,112 @@ import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
 const app = express();
 const PORT = process.env.PORT || 5464;
 
-// Middleware
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
+app.use(express.static(path.join(__dirname, 'dist')));
 
-// Serve static files (React build)
-const distPath = path.join(__dirname, 'dist');
-if (fs.existsSync(distPath)) {
-  app.use(express.static(distPath));
-}
-
-// --- DATABASE SETUP ---
 const dataDir = path.join(__dirname, 'data');
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
-}
-
-const dbPath = path.join(dataDir, 'shortcuts.db');
-const db = new Database(dbPath);
-
-// Enable WAL for better concurrency & durability
+if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+const db = new Database(path.join(dataDir, 'shortcuts.db'));
 db.pragma('journal_mode = WAL');
 
-// Basic schema + migrations
 db.exec(`
   CREATE TABLE IF NOT EXISTS shortcuts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    url TEXT NOT NULL,
-    icon_url TEXT,
-    parent_label TEXT,
-    child_label TEXT,
-    clicks INTEGER DEFAULT 0,
+    id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, url TEXT NOT NULL,
+    icon_url TEXT, parent_label TEXT, child_label TEXT, clicks INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
-
-  CREATE TABLE IF NOT EXISTS label_colors (
-    name TEXT PRIMARY KEY,
-    color_class TEXT
-  );
+  CREATE TABLE IF NOT EXISTS label_colors (name TEXT PRIMARY KEY, color_class TEXT);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_shortcuts_name_url ON shortcuts(name, url);
 `);
 
-// Ensure unique index for (name, url) to support upsert/merge imports
-db.exec(`
-  CREATE UNIQUE INDEX IF NOT EXISTS idx_shortcuts_name_url
-  ON shortcuts(name, url);
-`);
-
-// Helper: cleanup orphan labels (labels không còn được shortcut nào dùng)
 const cleanupOrphanLabels = () => {
-  db.exec(`
-    DELETE FROM label_colors
-    WHERE name NOT IN (
+  db.exec(`DELETE FROM label_colors WHERE name NOT IN (
       SELECT DISTINCT parent_label FROM shortcuts WHERE parent_label IS NOT NULL AND parent_label != ''
-      UNION
-      SELECT DISTINCT child_label FROM shortcuts WHERE child_label IS NOT NULL AND child_label != ''
-    );
-  `);
+      UNION SELECT DISTINCT child_label FROM shortcuts WHERE child_label IS NOT NULL AND child_label != '')`);
 };
 
-// Helper: validate & normalize shortcut payload
 const normalizeShortcutPayload = (body) => {
-  let {
-    name,
-    url,
-    icon_url,
-    parent_label,
-    child_label,
-    parent_color,
-    child_color
-  } = body || {};
-
-  if (!name || !url) {
-    throw new Error('Thiếu name hoặc url');
-  }
-
-  name = String(name).trim();
-  url = String(url).trim();
-  icon_url = icon_url ? String(icon_url) : '';
-  parent_label = parent_label ? String(parent_label).trim() : '';
-  child_label = child_label ? String(child_label).trim() : '';
-  parent_color = parent_color || '';
-  child_color = child_color || '';
-
-  try {
-    // Simple URL validation, not strict
-    const parsed = new URL(url);
-    if (!parsed.protocol.startsWith('http')) {
-      throw new Error('URL phải bắt đầu bằng http hoặc https');
-    }
-  } catch (e) {
-    throw new Error('URL không hợp lệ');
-  }
-
+  let { name, url, icon_url, parent_label, child_label, parent_color, child_color } = body || {};
+  if (!name || !url) throw new Error('Thiếu name hoặc url');
+  try { if (!new URL(url).protocol.startsWith('http')) throw new Error(); } catch (e) { throw new Error('URL không hợp lệ'); }
   return {
-    name,
-    url,
-    icon_url,
-    parent_label,
-    child_label,
-    parent_color,
-    child_color
+    name: String(name).trim(), url: String(url).trim(), icon_url: icon_url ? String(icon_url) : '',
+    parent_label: parent_label ? String(parent_label).trim() : '', child_label: child_label ? String(child_label).trim() : '',
+    parent_color: parent_color || '', child_color: child_color || ''
   };
 };
 
-// --- API ENDPOINTS ---
-
-// 1. Get All Data
 app.get('/api/data', (req, res) => {
   try {
-    const shortcuts = db
-      .prepare('SELECT * FROM shortcuts ORDER BY created_at DESC, id DESC')
-      .all();
+    const shortcuts = db.prepare('SELECT * FROM shortcuts ORDER BY created_at DESC, id DESC').all();
     const labels = db.prepare('SELECT * FROM label_colors').all();
-
-    const labelColorsMap = {};
-    labels.forEach((l) => {
-      labelColorsMap[l.name] = l.color_class;
-    });
-
-    res.json({ shortcuts, labelColors: labelColorsMap });
-  } catch (error) {
-    console.error('GET /api/data error:', error);
-    res.status(500).json({ error: 'Lỗi server khi lấy dữ liệu' });
-  }
+    const labelColors = {}; labels.forEach(l => labelColors[l.name] = l.color_class);
+    res.json({ shortcuts, labelColors });
+  } catch (e) { res.status(500).json({ error: 'Lỗi server' }); }
 });
 
-// 2. Add Shortcut
 app.post('/api/shortcuts', (req, res) => {
   try {
-    const {
-      name,
-      url,
-      icon_url,
-      parent_label,
-      child_label,
-      parent_color,
-      child_color
-    } = normalizeShortcutPayload(req.body || {});
-
-    const insert = db.prepare(`
-      INSERT INTO shortcuts (name, url, icon_url, parent_label, child_label, clicks)
-      VALUES (?, ?, ?, ?, ?, 0)
-      ON CONFLICT(name, url) DO UPDATE SET
-        icon_url = excluded.icon_url,
-        parent_label = excluded.parent_label,
-        child_label = excluded.child_label
-    `);
-
-    insert.run(
-      name,
-      url,
-      icon_url || '',
-      parent_label || '',
-      child_label || ''
-    );
-
-    const upsertLabel = db.prepare(`
-      INSERT OR REPLACE INTO label_colors (name, color_class)
-      VALUES (?, ?)
-    `);
-
-    if (parent_label && parent_color) {
-      upsertLabel.run(parent_label, parent_color);
-    }
-    if (child_label && child_color) {
-      upsertLabel.run(child_label, child_color);
-    }
-
+    const d = normalizeShortcutPayload(req.body);
+    db.prepare(`INSERT INTO shortcuts (name, url, icon_url, parent_label, child_label, clicks) VALUES (?, ?, ?, ?, ?, 0)
+      ON CONFLICT(name, url) DO UPDATE SET icon_url=excluded.icon_url, parent_label=excluded.parent_label, child_label=excluded.child_label`).run(d.name, d.url, d.icon_url, d.parent_label, d.child_label);
+    const upsertLabel = db.prepare(`INSERT OR REPLACE INTO label_colors (name, color_class) VALUES (?, ?)`);
+    if (d.parent_label && d.parent_color) upsertLabel.run(d.parent_label, d.parent_color);
+    if (d.child_label && d.child_color) upsertLabel.run(d.child_label, d.child_color);
     res.json({ success: true });
-  } catch (error) {
-    console.error('POST /api/shortcuts error:', error);
-    res.status(400).json({ error: error.message || 'Lỗi dữ liệu đầu vào' });
-  }
+  } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
-// 3. Update Shortcut
 app.put('/api/shortcuts/:id', (req, res) => {
   try {
-    const {
-      name,
-      url,
-      icon_url,
-      parent_label,
-      child_label,
-      parent_color,
-      child_color
-    } = normalizeShortcutPayload(req.body || {});
-    const id = Number(req.params.id);
-
-    const update = db.prepare(`
-      UPDATE shortcuts
-      SET name = ?, url = ?, icon_url = ?, parent_label = ?, child_label = ?
-      WHERE id = ?
-    `);
-
-    const result = update.run(
-      name,
-      url,
-      icon_url || '',
-      parent_label || '',
-      child_label || '',
-      id
-    );
-
-    if (result.changes === 0) {
-      return res.status(404).json({ error: 'Không tìm thấy shortcut để cập nhật' });
-    }
-
-    const upsertLabel = db.prepare(`
-      INSERT OR REPLACE INTO label_colors (name, color_class)
-      VALUES (?, ?)
-    `);
-
-    if (parent_label && parent_color) {
-      upsertLabel.run(parent_label, parent_color);
-    }
-    if (child_label && child_color) {
-      upsertLabel.run(child_label, child_color);
-    }
-
+    const d = normalizeShortcutPayload(req.body);
+    const result = db.prepare(`UPDATE shortcuts SET name=?, url=?, icon_url=?, parent_label=?, child_label=? WHERE id=?`).run(d.name, d.url, d.icon_url, d.parent_label, d.child_label, req.params.id);
+    if (result.changes === 0) return res.status(404).json({ error: 'Not found' });
+    const upsertLabel = db.prepare(`INSERT OR REPLACE INTO label_colors (name, color_class) VALUES (?, ?)`);
+    if (d.parent_label && d.parent_color) upsertLabel.run(d.parent_label, d.parent_color);
+    if (d.child_label && d.child_color) upsertLabel.run(d.child_label, d.child_color);
     cleanupOrphanLabels();
-
     res.json({ success: true });
-  } catch (error) {
-    console.error('PUT /api/shortcuts error:', error);
-    res.status(400).json({ error: error.message || 'Lỗi cập nhật dữ liệu' });
-  }
+  } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
-// 4. Delete Shortcut
 app.delete('/api/shortcuts/:id', (req, res) => {
   try {
-    const id = Number(req.params.id);
-    const stmt = db.prepare('DELETE FROM shortcuts WHERE id = ?');
-    const result = stmt.run(id);
-
-    if (result.changes === 0) {
-      return res.status(404).json({ error: 'Không tìm thấy shortcut để xóa' });
-    }
-
+    if (db.prepare('DELETE FROM shortcuts WHERE id = ?').run(req.params.id).changes === 0) return res.status(404).json({ error: 'Not found' });
     cleanupOrphanLabels();
-
     res.json({ success: true });
-  } catch (error) {
-    console.error('DELETE /api/shortcuts error:', error);
-    res.status(500).json({ error: 'Lỗi server khi xóa shortcut' });
-  }
+  } catch (e) { res.status(500).json({ error: 'Lỗi server' }); }
 });
 
-// 5. Click Tracking
 app.post('/api/click/:id', (req, res) => {
   try {
-    const id = Number(req.params.id);
-    const stmt = db.prepare(
-      'UPDATE shortcuts SET clicks = clicks + 1 WHERE id = ?'
-    );
-    const result = stmt.run(id);
-
-    if (result.changes === 0) {
-      return res.status(404).json({ error: 'Không tìm thấy shortcut' });
-    }
-
+    if (db.prepare('UPDATE shortcuts SET clicks = clicks + 1 WHERE id = ?').run(req.params.id).changes === 0) return res.status(404).json({ error: 'Not found' });
     res.json({ success: true });
-  } catch (error) {
-    console.error('POST /api/click error:', error);
-    res.status(500).json({ error: 'Lỗi click tracking' });
-  }
+  } catch (e) { res.status(500).json({ error: 'Lỗi server' }); }
 });
 
-// 6. Import Data (Merge)
 app.post('/api/import', (req, res) => {
   const { shortcuts, labels } = req.body || {};
-
-  const insertShortcut = db.prepare(`
-    INSERT INTO shortcuts (name, url, icon_url, parent_label, child_label, clicks)
-    VALUES (?, ?, ?, ?, ?, ?)
-    ON CONFLICT(name, url) DO UPDATE SET
-      icon_url = excluded.icon_url,
-      parent_label = excluded.parent_label,
-      child_label = excluded.child_label,
-      clicks = shortcuts.clicks + excluded.clicks
-  `);
-
-  const upsertLabel = db.prepare(`
-    INSERT OR REPLACE INTO label_colors (name, color_class)
-    VALUES (?, ?)
-  `);
-
-  const transaction = db.transaction(() => {
-    if (Array.isArray(shortcuts)) {
-      for (const s of shortcuts) {
-        if (!s || !s.name || !s.url) continue;
-
-        let name = String(s.name).trim();
-        let url = String(s.url).trim();
-        let icon = s.icon_url || '';
-        let parent = s.parent_label || '';
-        let child = s.child_label || '';
-        let clicks = Number(s.clicks || 0);
-
-        try {
-          const parsed = new URL(url);
-          if (!parsed.protocol.startsWith('http')) continue;
-        } catch {
-          continue;
-        }
-
-        insertShortcut.run(
-          name,
-          url,
-          icon,
-          parent,
-          child,
-          clicks >= 0 ? clicks : 0
-        );
-      }
-    }
-
-    if (Array.isArray(labels)) {
-      for (const l of labels) {
-        if (!l || !l.name) continue;
-        const name = String(l.name).trim();
-        const color = l.color_class || '';
-        if (!name) continue;
-        upsertLabel.run(name, color);
-      }
-    }
-
-    cleanupOrphanLabels();
-  });
-
+  const insert = db.prepare(`INSERT INTO shortcuts (name, url, icon_url, parent_label, child_label, clicks) VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(name, url) DO UPDATE SET icon_url=excluded.icon_url, parent_label=excluded.parent_label, child_label=excluded.child_label, clicks=shortcuts.clicks+excluded.clicks`);
+  const upsertLabel = db.prepare(`INSERT OR REPLACE INTO label_colors (name, color_class) VALUES (?, ?)`);
   try {
-    transaction();
+    db.transaction(() => {
+      if (Array.isArray(shortcuts)) shortcuts.forEach(s => {
+        if (!s?.name || !s?.url) return;
+        try { if(new URL(s.url).protocol.startsWith('http')) insert.run(s.name.trim(), s.url.trim(), s.icon_url||'', s.parent_label||'', s.child_label||'', Number(s.clicks||0)); } catch {}
+      });
+      if (Array.isArray(labels)) labels.forEach(l => { if(l?.name) upsertLabel.run(l.name.trim(), l.color_class||''); });
+      cleanupOrphanLabels();
+    })();
     res.json({ success: true });
-  } catch (error) {
-    console.error('POST /api/import error:', error);
-    res.status(500).json({ error: 'Lỗi import dữ liệu' });
-  }
+  } catch (e) { res.status(500).json({ error: 'Lỗi import' }); }
 });
 
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok' });
-});
-
-// Catch-all -> serve React app
-app.get('*', (req, res) => {
-  if (!fs.existsSync(path.join(distPath, 'index.html'))) {
-    return res
-      .status(500)
-      .send('Frontend chưa build. Hãy chạy "npm run build" trước.');
-  }
-  res.sendFile(path.join(distPath, 'index.html'));
-});
-
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log('Database file:', dbPath);
-});
+app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
+app.get('*', (req, res) => fs.existsSync(path.join(__dirname, 'dist', 'index.html')) ? res.sendFile(path.join(__dirname, 'dist', 'index.html')) : res.status(500).send('Frontend chưa build.'));
+app.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}`));
