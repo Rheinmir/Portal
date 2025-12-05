@@ -24,7 +24,6 @@ if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 const db = new Database(path.join(dataDir, 'shortcuts.db'));
 db.pragma('journal_mode = WAL');
 
-// Schema Definition
 db.exec(`
   CREATE TABLE IF NOT EXISTS shortcuts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -42,15 +41,12 @@ db.exec(`
   );
   CREATE TABLE IF NOT EXISTS label_colors (name TEXT PRIMARY KEY, color_class TEXT);
   CREATE TABLE IF NOT EXISTS app_config (key TEXT PRIMARY KEY, value TEXT);
-  
-  -- Table lưu lịch sử click chi tiết để phân tích hành vi
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_shortcuts_name_url ON shortcuts(name, url);
   CREATE TABLE IF NOT EXISTS click_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     shortcut_id INTEGER,
     clicked_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
-  
-  CREATE UNIQUE INDEX IF NOT EXISTS idx_shortcuts_name_url ON shortcuts(name, url);
 `);
 
 // --- HELPERS ---
@@ -95,7 +91,6 @@ const generateThumbnails = async (base64Str) => {
 
 // --- API ---
 
-// 1. Get Data & Config
 app.get('/api/data', (req, res) => {
   try {
     const shortcuts = db.prepare('SELECT * FROM shortcuts ORDER BY favorite DESC, created_at DESC').all();
@@ -109,56 +104,21 @@ app.get('/api/data', (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// 2. Click Tracking (Enhanced)
-app.post('/api/click/:id', (req, res) => {
-    try { 
-        const id = req.params.id;
-        // 1. Update counter (legacy/fast access)
-        db.prepare('UPDATE shortcuts SET clicks=clicks+1 WHERE id=?').run(id);
-        // 2. Log event detail (for insights)
-        db.prepare('INSERT INTO click_logs (shortcut_id) VALUES (?)').run(id);
-        res.json({ success: true }); 
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// 3. INSIGHTS API (New)
-app.get('/api/insights', (req, res) => {
+// Generic Config API (Set any key-value)
+app.post('/api/config', (req, res) => {
     try {
-        // Tổng số clicks
-        const totalClicks = db.prepare('SELECT COUNT(*) as count FROM click_logs').get().count;
-
-        // Top 5 Apps phổ biến nhất
-        const topApps = db.prepare(`
-            SELECT s.name, COUNT(cl.id) as count 
-            FROM click_logs cl
-            JOIN shortcuts s ON cl.shortcut_id = s.id
-            GROUP BY s.name 
-            ORDER BY count DESC 
-            LIMIT 5
-        `).all();
-
-        // Thống kê 7 ngày gần nhất (Timeline)
-        const timeline = db.prepare(`
-            SELECT date(clicked_at) as date, COUNT(*) as count 
-            FROM click_logs 
-            WHERE clicked_at >= date('now', '-7 days')
-            GROUP BY date(clicked_at)
-            ORDER BY date(clicked_at) ASC
-        `).all();
-
-        // Hour Heatmap (Phân bổ theo giờ trong ngày)
-        const hourly = db.prepare(`
-            SELECT strftime('%H', clicked_at) as hour, COUNT(*) as count
-            FROM click_logs
-            GROUP BY hour
-            ORDER BY hour ASC
-        `).all();
-
-        res.json({ totalClicks, topApps, timeline, hourly });
+        const configs = req.body; // Expect object { key: value, key2: value2 }
+        const stmt = db.prepare('INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?)');
+        db.transaction(() => {
+            for (const [key, value] of Object.entries(configs)) {
+                stmt.run(key, String(value));
+            }
+        })();
+        res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// 4. CRUD & Other Ops (Kept similar to previous version)
+// Legacy endpoint wrapper for backward compatibility if needed, but frontend updated to use generic
 app.post('/api/config/background', (req, res) => {
     try { db.prepare('INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?)').run('default_background', req.body.background_url || ''); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -190,6 +150,25 @@ app.put('/api/shortcuts/:id', async (req, res) => {
 
 app.delete('/api/shortcuts/:id', (req, res) => {
     try { db.prepare('DELETE FROM shortcuts WHERE id=?').run(req.params.id); cleanupOrphanLabels(); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/click/:id', (req, res) => {
+    try { 
+        const id = req.params.id;
+        db.prepare('UPDATE shortcuts SET clicks=clicks+1 WHERE id=?').run(id);
+        db.prepare('INSERT INTO click_logs (shortcut_id) VALUES (?)').run(id);
+        res.json({ success: true }); 
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/insights', (req, res) => {
+    try {
+        const totalClicks = db.prepare('SELECT COUNT(*) as count FROM click_logs').get().count;
+        const topApps = db.prepare(`SELECT s.name, COUNT(cl.id) as count FROM click_logs cl JOIN shortcuts s ON cl.shortcut_id = s.id GROUP BY s.name ORDER BY count DESC LIMIT 5`).all();
+        const timeline = db.prepare(`SELECT date(clicked_at) as date, COUNT(*) as count FROM click_logs WHERE clicked_at >= date('now', '-7 days') GROUP BY date(clicked_at) ORDER BY date(clicked_at) ASC`).all();
+        const hourly = db.prepare(`SELECT strftime('%H', clicked_at) as hour, COUNT(*) as count FROM click_logs GROUP BY hour ORDER BY hour ASC`).all();
+        res.json({ totalClicks, topApps, timeline, hourly });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/api/favorite/:id', (req, res) => {
