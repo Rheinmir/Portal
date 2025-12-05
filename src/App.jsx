@@ -148,7 +148,7 @@ export default function App() {
                     <div className={`w-20 h-20 rounded-[1.4rem] bg-gradient-to-br flex items-center justify-center text-white text-3xl font-bold shadow-md hover:shadow-lg transition-all mb-2 overflow-hidden relative backdrop-blur-sm bg-opacity-90`} style={getGradientStyle(labelColors[item.parent_label] || '#0A1A2F')}>
                       {item.icon_url ? <img src={item.icon_url} className="w-full h-full object-cover" /> : <span>{item.name.charAt(0).toUpperCase()}</span>}
                     </div>
-                    <span className={`text-sm text-center truncate w-32 px-1 leading-tight ${darkMode ? 'text-gray-200' : 'text-slate-600'} font-medium`} style={{textShadow: bgImage ? '0 1px 2px rgba(0,0,0,0.5)' : 'none'}}>{item.name}</span>
+                    <span className={`text-sm text-center truncate w-32 px-1 leading-tight ${darkMode ? 'text-gray-200' : 'text-[#0A1A2F]'} font-light`} style={{textShadow: bgImage ? '0 1px 2px rgba(0,0,0,0.5)' : 'none'}}>{item.name}</span>
                     <div className="flex flex-wrap justify-center gap-1 mt-1 px-1">
                         {item.parent_label && <span className="text-[9px] px-1.5 py-0.5 rounded-full text-white truncate max-w-[70px] shadow-sm" style={{ background: labelColors[item.parent_label] || '#9CA3AF' }}>{item.parent_label}</span>}
                         {item.child_label && <span className={`text-[9px] px-1.5 py-0.5 rounded-full border truncate max-w-[70px] bg-white/50 backdrop-blur-sm ${darkMode ? 'border-gray-600' : 'border-gray-300'}`} style={{ borderColor: labelColors[item.child_label] }}>{item.child_label}</span>}
@@ -165,10 +165,10 @@ export default function App() {
             </div>
           </div>
 
-          {/* SETTINGS DOCK */}
-          <div className="fixed bottom-6 right-6 z-50 pointer-events-auto">
+          {/* SETTINGS DOCK (Hidden by default, hover to show) */}
+          <div className="fixed bottom-6 right-6 z-50 pointer-events-auto opacity-0 hover:opacity-100 transition-opacity duration-300">
              <div className="group/menu flex items-center justify-end gap-2 p-2 rounded-full hover:bg-white/20 hover:backdrop-blur-md transition-all">
-                 <div className="opacity-0 group-hover/menu:opacity-100 flex items-center gap-2 transition-opacity duration-300">
+                 <div className="flex items-center gap-2">
                     {bgImage && <div className="flex items-center gap-1 mr-2 bg-black/40 rounded-full px-2 py-1 backdrop-blur-sm"><span className="text-[10px] text-white/90 font-bold">BG</span><input type="range" min="0" max="0.9" step="0.1" value={overlayOpacity} onChange={(e) => { const val = parseFloat(e.target.value); setOverlayOpacity(val); localStorage.setItem('overlayOpacity', val); }} className="w-16 h-1 accent-[#009FB8] cursor-pointer" /></div>}
                     <button onClick={() => setDarkMode(!darkMode)} className={`p-2 rounded-full border shadow-sm ${inputClass} ${bgImage ? 'bg-opacity-80' : ''}`}>{darkMode ? <Sun size={18} className="text-yellow-400"/> : <Moon size={18} className="text-gray-600"/>}</button>
                     {isAdmin ? (
@@ -192,7 +192,8 @@ export default function App() {
                         </div>
                      )}
                  </div>
-                 <div className="w-10 h-10 flex items-center justify-center bg-white/20 backdrop-blur-md rounded-full border border-white/30 text-white shadow-lg cursor-pointer group-hover/menu:hidden"><Settings size={20} className="animate-spin-slow" /></div>
+                 {/* Trigger Icon */}
+                 <div className="w-10 h-10 flex items-center justify-center bg-white/20 backdrop-blur-md rounded-full border border-white/30 text-white shadow-lg cursor-pointer group-hover/menu:hidden absolute bottom-0 right-0 pointer-events-none"><Settings size={20} className="animate-spin-slow" /></div>
              </div>
           </div>
 
