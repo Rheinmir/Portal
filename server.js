@@ -23,7 +23,7 @@ if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 const db = new Database(path.join(dataDir, 'shortcuts.db'));
 db.pragma('journal_mode = WAL');
 
-// Init Tables with new columns
+// Init Tables (Schema definition)
 db.exec(`
   CREATE TABLE IF NOT EXISTS shortcuts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -42,6 +42,18 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS label_colors (name TEXT PRIMARY KEY, color_class TEXT);
   CREATE UNIQUE INDEX IF NOT EXISTS idx_shortcuts_name_url ON shortcuts(name, url);
 `);
+
+// --- MIGRATIONS (Auto-add missing columns for existing DBs) ---
+try {
+  const columns = db.pragma('table_info(shortcuts)').map(c => c.name);
+  if (!columns.includes('icon_64')) db.prepare('ALTER TABLE shortcuts ADD COLUMN icon_64 TEXT').run();
+  if (!columns.includes('icon_128')) db.prepare('ALTER TABLE shortcuts ADD COLUMN icon_128 TEXT').run();
+  if (!columns.includes('icon_256')) db.prepare('ALTER TABLE shortcuts ADD COLUMN icon_256 TEXT').run();
+  if (!columns.includes('favorite')) db.prepare('ALTER TABLE shortcuts ADD COLUMN favorite INTEGER DEFAULT 0').run();
+  console.log('Database schema validated/migrated.');
+} catch (e) {
+  console.error('Migration error:', e);
+}
 
 // --- HELPERS ---
 const cleanupOrphanLabels = () => {
@@ -93,7 +105,6 @@ const generateThumbnails = async (base64Str) => {
 // 1. Get Data
 app.get('/api/data', (req, res) => {
   try {
-    // Sort logic handled in Frontend or simple default here
     const shortcuts = db.prepare('SELECT * FROM shortcuts ORDER BY favorite DESC, created_at DESC').all();
     const labels = db.prepare('SELECT * FROM label_colors').all();
     const labelColors = {}; labels.forEach(l => labelColors[l.name] = l.color_class);
