@@ -5,7 +5,7 @@ const getContrastYIQ=(hex)=>{if(!hex)return'#fff';const h=hex.replace('#','');co
 const normalizeTenant=t=>(t&&typeof t==='string'?t.trim():'')||'default';
 
 export default function App(){
-  const[shortcuts,setShortcuts]=useState([]),[labelColors,setLabelColors]=useState({}),[loading,setLoading]=useState(true),[darkMode,setDarkMode]=useState(()=>localStorage.getItem('darkMode')==='true'),[bgImage,setBgImage]=useState(null),[serverBg,setServerBg]=useState(null),[overlayOpacity,setOverlayOpacity]=useState(()=>parseFloat(localStorage.getItem('overlayOpacity'))??0.5);
+  const[shortcuts,setShortcuts]=useState([]),[labelColors,setLabelColors]=useState({}),[loading,setLoading]=useState(true),[darkMode,setDarkMode]=useState(()=>localStorage.getItem('darkMode')==='true'),[bgImage,setBgImage]=useState(null),[serverBg,setServerBg]=useState(null),[overlayOpacity,setOverlayOpacity]=useState(()=>{const r=localStorage.getItem('overlayOpacity');const n=parseFloat(r);return isNaN(n)?0.5:n});
   const[lightTextColor,setLightTextColor]=useState(()=>localStorage.getItem('custom_text_light')||DEFAULT_LIGHT_TEXT),[darkTextColor,setDarkTextColor]=useState(()=>localStorage.getItem('custom_text_dark')||DEFAULT_DARK_TEXT);
   const[formData,setFormData]=useState({id:null,name:'',url:'',icon_url:'',parent_label:'',parent_color:COLOR_PRESETS[0],child_label:'',child_color:COLOR_PRESETS[1],isLocal:false}),[searchTerm,setSearchTerm]=useState(''),[showFilterPanel,setShowFilterPanel]=useState(false),[activeParentFilter,setActiveParentFilter]=useState(null),[activeChildFilter,setActiveChildFilter]=useState(null),[copiedId,setCopiedId]=useState(null),[isAdmin,setIsAdmin]=useState(false),[showLoginModal,setShowLoginModal]=useState(false),[showAddModal,setShowAddModal]=useState(false),[showInsightsModal,setShowInsightsModal]=useState(false),[insightsData,setInsightsData]=useState(null),[loginCreds,setLoginCreds]=useState({username:'',password:''}),[loginError,setLoginError]=useState(''),[sortBy,setSortBy]=useState('default'),[tenant,setTenant]=useState(()=>normalizeTenant(localStorage.getItem('tenant')));
   const fileInputRef=useRef(null),bgInputRef=useRef(null),importInputRef=useRef(null);
@@ -13,36 +13,50 @@ export default function App(){
   useEffect(()=>{if(darkMode)document.documentElement.classList.add('dark');else document.documentElement.classList.remove('dark');localStorage.setItem('darkMode',darkMode)},[darkMode]);
 
   const fetchData=async()=>{try{const r=await fetch('/api/data?tenant='+encodeURIComponent(tenant));const d=await r.json();const ss=d.shortcuts||[];const ls=JSON.parse(localStorage.getItem('local_shortcuts')||'[]').map(s=>({...s,isLocal:true,child_label:(s.child_label||'').includes('Personal')?s.child_label:(s.child_label?(s.child_label+', Personal'):'Personal')}));setShortcuts([...ss,...ls]);setLabelColors(d.labelColors||{});
-      // Config Sync Logic
       const c=d.appConfig||{};
       const serverVer=Number(c.config_version||0);
       const localVer=Number(localStorage.getItem('config_version')||0);
       
-      // FORCE SYNC TRIGGER
       if(serverVer > localVer) {
-         console.log("Force sync triggered!");
          localStorage.removeItem('custom_bg');
          localStorage.removeItem('custom_text_light');
          localStorage.removeItem('custom_text_dark');
+         localStorage.removeItem('overlayOpacity');
+         localStorage.removeItem('darkMode');
          localStorage.setItem('config_version', serverVer);
-         
-         // Apply server configs
          setServerBg(c.default_background||null);
          setBgImage(c.default_background||null);
          setLightTextColor(c.text_color_light||DEFAULT_LIGHT_TEXT);
          setDarkTextColor(c.text_color_dark||DEFAULT_DARK_TEXT);
+         const srvOpacity = c.overlay_opacity != null ? Number(c.overlay_opacity) : 0.5;
+         setOverlayOpacity(isNaN(srvOpacity) ? 0.5 : srvOpacity);
+         const srvDark = c.dark_mode_default === '1' || c.dark_mode_default === 'true';
+         setDarkMode(srvDark);
       } else {
-         // Normal load: Prefer Local > Server
          setServerBg(c.default_background||null);
          setBgImage(localStorage.getItem('custom_bg')||c.default_background||null);
          setLightTextColor(localStorage.getItem('custom_text_light')||c.text_color_light||DEFAULT_LIGHT_TEXT);
          setDarkTextColor(localStorage.getItem('custom_text_dark')||c.text_color_dark||DEFAULT_DARK_TEXT);
+         const localOpStr = localStorage.getItem('overlayOpacity');
+         const op = localOpStr != null ? Number(localOpStr) : (c.overlay_opacity != null ? Number(c.overlay_opacity) : 0.5);
+         setOverlayOpacity(isNaN(op) ? 0.5 : op);
+         const localDarkStr = localStorage.getItem('darkMode');
+         if (localDarkStr != null) setDarkMode(localDarkStr === 'true');
+         else {
+             const srvDark = c.dark_mode_default === '1' || c.dark_mode_default === 'true';
+             setDarkMode(srvDark);
+         }
       }
     }catch(e){console.error(e)}finally{setLoading(false)}};
 
   useEffect(()=>{fetchData()},[tenant]);
   const saveConfig=async(k,v)=>{try{await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({[k]:v})})}catch{}};
-  const handleTextColorChange=(m,c)=>{if(m==='light'){setLightTextColor(c);localStorage.setItem('custom_text_light',c)}else{setDarkTextColor(c);localStorage.setItem('custom_text_dark',c)}};
+  
+  const handleTextColorChange=(m,c)=>{
+    if(m==='light'){setLightTextColor(c);localStorage.setItem('custom_text_light',c);if(isAdmin)saveConfig('text_color_light',c)}
+    else{setDarkTextColor(c);localStorage.setItem('custom_text_dark',c);if(isAdmin)saveConfig('text_color_dark',c)}
+  };
+  
   const handleBgUpload=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{const b=ev.target.result;setBgImage(b);if(isAdmin){if(confirm("Lưu mặc định server?")){saveConfig('default_background',b);alert("Đã lưu server!")}else localStorage.setItem('custom_bg',b)}else localStorage.setItem('custom_bg',b)};r.readAsDataURL(f)};
   const fetchInsights=async()=>{try{const r=await fetch('/api/insights');setInsightsData(await r.json());setShowInsightsModal(true)}catch{alert("Lỗi insights")}};
   const handleExportStats=()=>{window.open('/api/insights/export','_blank')};
@@ -52,19 +66,12 @@ export default function App(){
   const handleSubmit=async e=>{
       e.preventDefault();
       if(!formData.name.trim()||!formData.url.trim())return alert('Thiếu tên/URL');
-      
-      // AUTO FAVICON LOGIC
       let iconToSave = formData.icon_url;
       if (!iconToSave) {
-          try {
-              const urlObj = new URL(formData.url);
-              iconToSave = `https://www.google.com/s2/favicons?domain=${urlObj.hostname}&sz=128`;
-          } catch(e) {}
+          try { const urlObj = new URL(formData.url); iconToSave = `https://www.google.com/s2/favicons?domain=${urlObj.hostname}&sz=128`; } catch(e) {}
       }
-
       const payload = { ...formData, icon_url: iconToSave };
       const isLocal=!isAdmin||formData.isLocal;
-      
       if(isLocal){
           const l=JSON.parse(localStorage.getItem('local_shortcuts')||'[]');let nl;
           if(formData.id&&formData.isLocal)nl=l.map(s=>s.id===formData.id?{...payload,id:formData.id}:s);
@@ -84,14 +91,25 @@ export default function App(){
   const handleExportData=()=>{const d='data:text/json;charset=utf-8,'+encodeURIComponent(JSON.stringify({version:2,timestamp:new Date().toISOString(),shortcuts:shortcuts.filter(s=>!s.isLocal),labels:labelColors}));const a=document.createElement('a');a.href=d;a.download='backup.json';document.body.appendChild(a);a.click();a.remove()};
   const handleImportData=e=>{const f=e.target.files[0];if(f){const r=new FileReader();r.onload=async ev=>{await fetch('/api/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(JSON.parse(ev.target.result))});alert("Import OK!");fetchData()};r.readAsText(f)}};
   
-  // FORCE SYNC HANDLER
   const handleForceSync=async()=>{
-      if(confirm("Hành động này sẽ cập nhật phiên bản cấu hình trên Server. Mọi máy client (kể cả máy này) sẽ bị XÓA cache cấu hình cũ và tải cấu hình mới từ Admin trong lần tải lại trang tiếp theo. Tiếp tục?")) {
-          try {
-              await fetch('/api/config/force', { method: 'POST' });
-              alert("Đã gửi lệnh đồng bộ! Client sẽ nhận diện ở lần tải trang sau.");
-              fetchData(); // Re-fetch to get new version
-          } catch { alert("Lỗi sync"); }
+      if(!isAdmin)return;
+      if(confirm("Cập nhật cấu hình lên Server và ép Client tải lại?")){
+          try{
+              const p={
+                  text_color_light:lightTextColor,
+                  text_color_dark:darkTextColor,
+                  overlay_opacity:overlayOpacity,
+                  dark_mode_default:darkMode?'1':'0'
+              };
+              if(bgImage) p.default_background = bgImage;
+              const r=await fetch('/api/config/force',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});
+              const d=await r.json();
+              if(d.success){
+                  if(d.version)localStorage.setItem('config_version',d.version);
+                  alert("Đã đồng bộ!");
+                  fetchData();
+              }else alert("Lỗi: "+d.error);
+          }catch{alert("Lỗi sync")}
       }
   };
 
@@ -134,7 +152,7 @@ export default function App(){
           {filteredShortcuts.map(i=>(<div key={i.id} className="group relative flex flex-col items-center w-full max-w-[100px] cursor-pointer active:scale-95 transition-transform" onClick={()=>handleLinkClick(i.id,i.url)}>
             <div className="absolute -top-2 -right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10 scale-90"><button onClick={e=>{e.stopPropagation();setCopiedId(i.id);navigator.clipboard.writeText(i.url);setTimeout(()=>setCopiedId(null),1000)}} className={`p-1.5 rounded-full shadow-sm border ${cardClass} bg-opacity-90`}>{copiedId===i.id?<Check size={12} className="text-green-500"/>:<Copy size={12}/>}</button>{(isAdmin||i.isLocal)&&(<><button onClick={e=>handleEdit(i,e)} className={`p-1.5 rounded-full shadow-sm border ml-1 ${cardClass}`}><Pencil size={12}/></button><button onClick={e=>{e.stopPropagation();handleDelete(i.id)}} className={`p-1.5 rounded-full shadow-sm border ml-1 ${cardClass}`}><Trash2 size={12}/></button></>)}</div>
             <button onClick={e=>handleToggleFavorite(i.id,e)} className={`absolute -top-1 -left-1 z-10 p-1 rounded-full transition-transform hover:scale-110 ${i.favorite?'text-yellow-400':'text-gray-300 opacity-0 group-hover:opacity-100'}`}><Star size={14} fill={i.favorite?"currentColor":"none"}/></button>
-            <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br flex items-center justify-center text-white text-2xl font-bold shadow-md hover:shadow-lg transition-all mb-2 overflow-hidden relative backdrop-blur-sm bg-opacity-90`} style={getGradientStyle(labelColors[i.parent_label]||'#0A1A2F')}>{i.icon_url?<img src={i.icon_url} className="w-full h-full object-cover"/>:<span>{i.name.charAt(0).toUpperCase()}</span>}</div>
+            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-white text-2xl font-bold shadow-md hover:shadow-lg transition-all mb-2 overflow-hidden relative backdrop-blur-sm ${i.icon_url?'bg-transparent':'bg-gradient-to-br bg-opacity-90'}`} style={i.icon_url?{}:getGradientStyle(labelColors[i.parent_label]||'#0A1A2F')}>{i.icon_url?<img src={i.icon_url} className="w-full h-full object-contain"/>:<span>{i.name.charAt(0).toUpperCase()}</span>}</div>
             <span className="text-xs text-center truncate w-full px-1 leading-tight font-light" style={{textShadow:bgImage?'0 1px 2px rgba(0,0,0,0.5)':'none'}}>{i.name}</span>
             <div className="flex flex-wrap justify-center gap-1 mt-1 px-1">
               {i.parent_label&&<span className="text-[8px] px-1 py-0.5 rounded-full text-white truncate max-w-[60px] shadow-sm mb-0.5" style={{background:labelColors[i.parent_label]||'#9CA3AF',color:getContrastYIQ(labelColors[i.parent_label]||'#9CA3AF')}}>{i.parent_label}</span>}
@@ -149,7 +167,7 @@ export default function App(){
 
         <div className="fixed bottom-6 right-6 z-50 pointer-events-auto opacity-0 hover:opacity-100 transition-opacity duration-300">
           <div className="group/menu flex items-center justify-end gap-2 p-2 rounded-full hover:bg-white/20 hover:backdrop-blur-md transition-all">
-            <div className="flex items-center gap-2">{bgImage&&<div className="flex items-center gap-1 mr-2 bg-black/40 rounded-full px-2 py-1 backdrop-blur-sm"><span className="text-[10px] text-white/90 font-bold">BG</span><input type="range" min="0" max="0.9" step="0.1" value={overlayOpacity} onChange={e=>{const v=parseFloat(e.target.value);setOverlayOpacity(v);localStorage.setItem('overlayOpacity',v)}} className="w-16 h-1 accent-[#009FB8] cursor-pointer"/></div>}
+            <div className="flex items-center gap-2">{bgImage&&<div className="flex items-center gap-1 mr-2 bg-black/40 rounded-full px-2 py-1 backdrop-blur-sm"><span className="text-[10px] text-white/90 font-bold">BG</span><input type="range" min="0" max="0.9" step="0.1" value={overlayOpacity} onChange={e=>{const v=parseFloat(e.target.value);setOverlayOpacity(v);localStorage.setItem('overlayOpacity',v);if(isAdmin)saveConfig('overlay_opacity',v)}} className="w-16 h-1 accent-[#009FB8] cursor-pointer"/></div>}
             <button onClick={()=>setDarkMode(!darkMode)} className={`p-2 rounded-full border shadow-sm ${inputClass} ${bgImage?'bg-opacity-80':''}`}>{darkMode?<Sun size={18} className="text-yellow-400"/>:<Moon size={18} className="text-gray-600"/>}</button>
             <div className={`flex items-center gap-1 p-1 rounded-full border shadow-lg ${inputClass} bg-opacity-80 backdrop-blur`}>
               <div className="flex flex-col gap-0.5 mr-1 border-r border-gray-400/30 pr-1"><div className="flex items-center gap-1" title="Text Light"><Type size={10} className="text-orange-400"/><input type="color" value={lightTextColor} onChange={e=>handleTextColorChange('light',e.target.value)} className="w-4 h-4 p-0 border-none bg-transparent cursor-pointer"/></div><div className="flex items-center gap-1" title="Text Dark"><Type size={10} className="text-blue-300"/><input type="color" value={darkTextColor} onChange={e=>handleTextColorChange('dark',e.target.value)} className="w-4 h-4 p-0 border-none bg-transparent cursor-pointer"/></div></div>
@@ -168,6 +186,7 @@ export default function App(){
                 <button onClick={()=>setShowLoginModal(true)} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"><Settings size={18}/></button>
               </>)}
             </div></div>
+            <div className="w-10 h-10 flex items-center justify-center bg-white/20 backdrop-blur-md rounded-full border border-white/30 text-white shadow-lg cursor-pointer group-hover/menu:hidden absolute bottom-0 right-0 pointer-events-none"><Settings size={20} className="animate-spin-slow"/></div>
           </div>
         </div>
 
@@ -200,7 +219,7 @@ export default function App(){
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"><div className={`rounded-2xl shadow-2xl w-full max-w-xs p-6 border ${modalClass}`}><div className="flex justify-between items-center mb-6"><h3 className="font-bold">Admin</h3><button onClick={()=>setShowLoginModal(false)}><X size={20}/></button></div><form onSubmit={handleLogin} className="space-y-4"><input type="text" placeholder="User" className={`w-full px-4 py-2 rounded-lg text-sm border ${inputClass}`} value={loginCreds.username} onChange={e=>setLoginCreds({...loginCreds,username:e.target.value})}/><input type="password" placeholder="Pass" className={`w-full px-4 py-2 rounded-lg text-sm border ${inputClass}`} value={loginCreds.password} onChange={e=>setLoginCreds({...loginCreds,password:e.target.value})}/>{loginError&&<p className="text-red-500 text-xs">{loginError}</p>}<button className="w-full py-2 bg-[#0F2F55] text-white rounded-lg hover:bg-opacity-90">Login</button></form></div></div>
         )}
         {showAddModal&&(
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"><div className={`rounded-2xl shadow-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto border ${modalClass}`}><div className="flex justify-between items-center mb-4"><h3 className="font-bold">{formData.id?'Sửa':'Thêm'} App</h3><button onClick={()=>setShowAddModal(false)}><X size={20}/></button></div><form onSubmit={handleSubmit} className="space-y-3"><input type="text" placeholder="Tên" className={`w-full px-4 py-3 rounded-xl text-sm border ${inputClass}`} value={formData.name} onChange={e=>setFormData({...formData,name:e.target.value})} required/><input type="url" placeholder="URL" className={`w-full px-4 py-3 rounded-xl text-sm border ${inputClass}`} value={formData.url} onChange={e=>setFormData({...formData,url:e.target.value})} required/><p className="text-[10px] text-gray-400 ml-1 -mt-2">URL cần bắt đầu bằng https://</p>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"><div className={`rounded-2xl shadow-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto border ${modalClass}`}><div className="flex justify-between items-center mb-4"><h3 className="font-bold">{formData.id?'Sửa':'Thêm'} App</h3><button onClick={()=>setShowAddModal(false)}><X size={20}/></button></div><form onSubmit={handleSubmit} className="space-y-3"><input type="text" placeholder="Tên" className={`w-full px-4 py-3 rounded-xl text-sm border ${inputClass}`} value={formData.name} onChange={e=>setFormData({...formData,name:e.target.value})} required/><input type="url" placeholder="URL" className={`w-full px-4 py-3 rounded-xl text-sm border ${inputClass}`} value={formData.url} onChange={e=>setFormData({...formData,url:e.target.value})} required/>
           <div onClick={() => fileInputRef.current?.click()} className={`w-full px-4 py-3 rounded-xl cursor-pointer flex items-center gap-3 border ${inputClass} hover:opacity-80`}>{formData.icon_url?<img src={formData.icon_url} className="w-10 h-10 rounded border object-cover"/>:<div className="w-10 h-10 rounded bg-gray-500/20 flex items-center justify-center"><Upload size={20}/></div>}<div><p className="text-sm font-medium">Tải icon lên</p></div></div><input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageUpload}/>
           <input type="text" placeholder="Hoặc dán link ảnh (https://...)" className={`w-full px-4 py-2 rounded-xl text-sm border ${inputClass}`} value={formData.icon_url?.startsWith('data:')?'':formData.icon_url} onChange={e=>setFormData({...formData,icon_url:e.target.value})}/>
           <div className={`border-t pt-3 space-y-4 ${darkMode?'border-gray-700':'border-gray-200'}`}><div className="grid grid-cols-[1fr_auto] gap-2 items-center"><input type="text" placeholder="Nhóm lớn" className={`px-3 py-2 rounded-lg text-sm border ${inputClass}`} value={formData.parent_label} onChange={e=>setFormData({...formData,parent_label:e.target.value})}/><div className="relative w-8 h-8 rounded-full border overflow-hidden cursor-pointer"><input type="color" className="absolute -top-2 -left-2 w-12 h-12" value={formData.parent_color} onChange={e=>setFormData({...formData,parent_color:e.target.value})}/></div></div><div className="grid grid-cols-[1fr_auto] gap-2 items-center"><input type="text" placeholder="Nhóm con (cách nhau phẩy)" className={`px-3 py-2 rounded-lg text-sm border ${inputClass}`} value={formData.child_label} onChange={e=>setFormData({...formData,child_label:e.target.value})}/><div className="relative w-8 h-8 rounded-full border overflow-hidden cursor-pointer"><input type="color" className="absolute -top-2 -left-2 w-12 h-12" value={formData.child_color} onChange={e=>setFormData({...formData,child_color:e.target.value})}/></div></div></div><button className="w-full py-3 bg-[#0F2F55] text-white rounded-xl mt-2 hover:bg-opacity-90">Lưu</button></form></div></div>
