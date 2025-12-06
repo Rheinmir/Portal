@@ -1,4 +1,48 @@
-import React,{useState,useEffect,useRef,useMemo}from'react';import{Save,Trash2,Plus,Search,Activity,Copy,Check,Settings,LogOut,X,Filter,Tag,Upload,Download,FileUp,Pencil,Star,Moon,Sun,LayoutGrid,List,Image as ImageIcon,RotateCcw,BarChart as ChartIcon,Palette,Type,RefreshCw}from'lucide-react';
+import os, json, random, shutil
+
+PROJECT_NAME = "shortcut-manager-sqlite-server"
+PORT = 5464
+
+# --- 1. SERVER CODE ---
+server_js_content = """import express from 'express';import Database from 'better-sqlite3';import cors from 'cors';import path from 'path';import {fileURLToPath}from 'url';import fs from 'fs';import crypto from 'crypto';import cron from 'node-cron';import sharp from 'sharp';
+const __dirname=path.dirname(fileURLToPath(import.meta.url)),app=express(),PORT=process.env.PORT||5464,dataDir=path.join(__dirname,'data'),backupDir=path.join(dataDir,'backup'),dbPath=path.join(dataDir,'shortcuts.db');
+app.use(cors());app.use(express.json({limit:'50mb'}));if(fs.existsSync(path.join(__dirname,'dist')))app.use(express.static(path.join(__dirname,'dist')));
+[dataDir,backupDir].forEach(d=>{if(!fs.existsSync(d))fs.mkdirSync(d,{recursive:true})});
+const db=new Database(dbPath);db.pragma('journal_mode = WAL');
+
+// --- AUTO MIGRATION ---
+const ensureColumn=(t,d)=>{const[c]=d.split(" ");try{if(!db.prepare(`PRAGMA table_info(${t})`).all().some(x=>x.name===c)){console.log(`Adding ${c} to ${t}`);db.prepare(`ALTER TABLE ${t} ADD COLUMN ${d}`).run()}}catch(e){console.error(e)}};
+ensureColumn("shortcuts","tenant TEXT NOT NULL DEFAULT 'default'");ensureColumn("shortcuts","icon_64 TEXT");ensureColumn("shortcuts","icon_128 TEXT");ensureColumn("shortcuts","icon_256 TEXT");ensureColumn("shortcuts","parent_label TEXT");ensureColumn("shortcuts","child_label TEXT");ensureColumn("shortcuts","favorite INTEGER DEFAULT 0");ensureColumn("shortcuts","clicks INTEGER DEFAULT 0");ensureColumn("shortcuts","created_at DATETIME DEFAULT CURRENT_TIMESTAMP");ensureColumn("label_colors","tenant TEXT NOT NULL DEFAULT 'default'");ensureColumn("label_colors","color_class TEXT");ensureColumn("admins","role TEXT NOT NULL DEFAULT 'admin'");
+
+db.exec(`CREATE TABLE IF NOT EXISTS shortcuts(id INTEGER PRIMARY KEY AUTOINCREMENT,tenant TEXT NOT NULL DEFAULT 'default',name TEXT NOT NULL,url TEXT NOT NULL,icon_url TEXT,icon_64 TEXT,icon_128 TEXT,icon_256 TEXT,parent_label TEXT,child_label TEXT,favorite INTEGER DEFAULT 0,clicks INTEGER DEFAULT 0,created_at DATETIME DEFAULT CURRENT_TIMESTAMP);CREATE TABLE IF NOT EXISTS label_colors(name TEXT NOT NULL,tenant TEXT NOT NULL DEFAULT 'default',color_class TEXT,PRIMARY KEY(name,tenant));CREATE TABLE IF NOT EXISTS admins(username TEXT PRIMARY KEY,password_hash TEXT NOT NULL,role TEXT NOT NULL DEFAULT 'admin');CREATE TABLE IF NOT EXISTS app_config(key TEXT PRIMARY KEY,value TEXT);CREATE TABLE IF NOT EXISTS click_logs(id INTEGER PRIMARY KEY AUTOINCREMENT,shortcut_id INTEGER,clicked_at DATETIME DEFAULT CURRENT_TIMESTAMP);CREATE UNIQUE INDEX IF NOT EXISTS idx_shortcuts_name_url_tenant ON shortcuts(name,url,tenant);`);
+if(!db.prepare('SELECT COUNT(*) as c FROM admins').get().c)db.prepare('INSERT INTO admins(username,password_hash,role)VALUES(?,?,?)').run('admin',crypto.createHash('sha256').update('miniappadmin').digest('hex'),'superadmin');
+const normalizeTenant=t=>(t&&typeof t==='string'?t.trim():'')||'default';
+const cleanupOrphanLabels=t=>{const ten=normalizeTenant(t),used=new Set();db.prepare('SELECT parent_label,child_label FROM shortcuts WHERE tenant=?').all(ten).forEach(s=>{if(s.parent_label)used.add(s.parent_label);if(s.child_label)s.child_label.split(',').forEach(x=>used.add(x.trim()))});const all=db.prepare('SELECT name FROM label_colors WHERE tenant=?').all(ten);const del=db.prepare('DELETE FROM label_colors WHERE name=? AND tenant=?');all.forEach(l=>{if(!used.has(l.name)&&l.name!=='')del.run(l.name,ten)})};
+const normPayload=b=>{let{name,url,icon_url,parent_label,child_label,parent_color,child_color,tenant}=b||{};if(!name||!url)throw new Error('Name/URL missing');try{if(!new URL(url).protocol.startsWith('http'))throw 0}catch{throw new Error('Invalid URL')}return{tenant:normalizeTenant(tenant),name:String(name).trim(),url:String(url).trim(),icon_url:icon_url||'',parent_label:parent_label?String(parent_label).trim():'',child_label:child_label?String(child_label).trim():'',parent_color:parent_color||'',child_color:child_color||''}};
+const genThumb=async u=>{if(!u||!u.startsWith('data:image'))return{icon_64:null,icon_128:null,icon_256:null};try{const b=Buffer.from(u.split(',')[1],'base64');const[b64,b128,b256]=await Promise.all([64,128,256].map(s=>sharp(b).resize(s,s).png().toBuffer()));return{icon_64:`data:image/png;base64,${b64.toString('base64')}`,icon_128:`data:image/png;base64,${b128.toString('base64')}`,icon_256:`data:image/png;base64,${b256.toString('base64')}`}}catch{return{icon_64:null,icon_128:null,icon_256:null}}};
+
+// API
+app.post('/api/login',(q,s)=>{try{const{username,password}=q.body||{},r=db.prepare('SELECT * FROM admins WHERE username=?').get(username?.trim());if(!r||crypto.createHash('sha256').update(password||'').digest('hex')!==r.password_hash)return s.status(401).json({error:'Auth failed'});s.json({success:true,role:r.role||'admin'})}catch(e){s.status(500).json({error:e.message})}});
+app.get('/api/data',(q,s)=>{try{const t=normalizeTenant(q.query.tenant),sc=db.prepare('SELECT * FROM shortcuts WHERE tenant=? ORDER BY favorite DESC, created_at DESC, id DESC').all(t),lc=db.prepare('SELECT name,color_class FROM label_colors WHERE tenant=?').all(t),cfg=db.prepare('SELECT key,value FROM app_config').all(),lcm={},ac={};lc.forEach(l=>lcm[l.name]=l.color_class);cfg.forEach(c=>ac[c.key]=c.value);s.json({shortcuts:sc,labelColors:lcm,appConfig:ac,tenant:t})}catch(e){s.status(500).json({error:e.message})}});
+app.post('/api/config',(q,s)=>{try{const c=q.body,st=db.prepare('INSERT OR REPLACE INTO app_config(key,value)VALUES(?,?)');db.transaction(()=>{for(const[k,v]of Object.entries(c))st.run(k,String(v))})();s.json({success:true})}catch(e){s.status(500).json({error:e.message})}});
+
+// FORCE SYNC API
+app.post('/api/config/force',(q,s)=>{try{db.prepare('INSERT OR REPLACE INTO app_config(key,value)VALUES(?,?)').run('config_version',Date.now().toString());s.json({success:true,version:Date.now()})}catch(e){s.status(500).json({error:e.message})}});
+
+app.post('/api/shortcuts',async(q,s)=>{try{const d=normPayload(q.body),th=await genThumb(d.icon_url);db.prepare(`INSERT INTO shortcuts(tenant,name,url,icon_url,icon_64,icon_128,icon_256,parent_label,child_label,favorite,clicks)VALUES(?,?,?,?,?,?,?,?,?,0,0)ON CONFLICT(name,url,tenant)DO UPDATE SET icon_url=excluded.icon_url,icon_64=excluded.icon_64,icon_128=excluded.icon_128,icon_256=excluded.icon_256,parent_label=excluded.parent_label,child_label=excluded.child_label`).run(d.tenant,d.name,d.url,d.icon_url,th.icon_64,th.icon_128,th.icon_256,d.parent_label,d.child_label);const ups=db.prepare('INSERT OR REPLACE INTO label_colors(name,tenant,color_class)VALUES(?,?,?)');if(d.parent_label&&d.parent_color)ups.run(d.parent_label,d.tenant,d.parent_color);if(d.child_label&&d.child_color)d.child_label.split(',').forEach(t=>ups.run(t.trim(),d.tenant,d.child_color));s.json({success:true})}catch(e){s.status(400).json({error:e.message})}});
+app.put('/api/shortcuts/:id',async(q,s)=>{try{const d=normPayload(q.body),id=+q.params.id,th=await genThumb(d.icon_url);if(!db.prepare(`UPDATE shortcuts SET name=?,url=?,icon_url=?,icon_64=?,icon_128=?,icon_256=?,parent_label=?,child_label=? WHERE id=? AND tenant=?`).run(d.name,d.url,d.icon_url,th.icon_64,th.icon_128,th.icon_256,d.parent_label,d.child_label,id,d.tenant).changes)return s.status(404).json({error:'Not found'});const ups=db.prepare('INSERT OR REPLACE INTO label_colors(name,tenant,color_class)VALUES(?,?,?)');if(d.parent_label&&d.parent_color)ups.run(d.parent_label,d.tenant,d.parent_color);if(d.child_label&&d.child_color)d.child_label.split(',').forEach(t=>ups.run(t.trim(),d.tenant,d.child_color));cleanupOrphanLabels(d.tenant);s.json({success:true})}catch(e){s.status(400).json({error:e.message})}});
+app.delete('/api/shortcuts/:id',(q,s)=>{try{const id=+q.params.id,r=db.prepare('SELECT tenant FROM shortcuts WHERE id=?').get(id);if(!r||!db.prepare('DELETE FROM shortcuts WHERE id=?').run(id).changes)return s.status(404).json({error:'Not found'});cleanupOrphanLabels(r.tenant);s.json({success:true})}catch(e){s.status(500).json({error:e.message})}});
+app.post('/api/click/:id',(q,s)=>{try{const id=+q.params.id;db.prepare('UPDATE shortcuts SET clicks=clicks+1 WHERE id=?').run(id);db.prepare('INSERT INTO click_logs(shortcut_id)VALUES(?)').run(id);s.json({success:true})}catch{s.status(500).json({error:'Error'})}});
+app.post('/api/favorite/:id',(q,s)=>{try{const id=+q.params.id,r=db.prepare('SELECT favorite FROM shortcuts WHERE id=?').get(id);if(!r)return s.status(404).json({error:'Not found'});const nv=r.favorite?0:1;db.prepare('UPDATE shortcuts SET favorite=? WHERE id=?').run(nv,id);s.json({success:true,favorite:nv})}catch{s.status(500).json({error:'Error'})}});
+app.get('/api/insights',(q,s)=>{try{const tc=db.prepare('SELECT COUNT(*) as c FROM click_logs').get().c,top=db.prepare('SELECT s.name,COUNT(cl.id) as c FROM click_logs cl JOIN shortcuts s ON cl.shortcut_id=s.id GROUP BY s.name ORDER BY c DESC LIMIT 10').all(),tl=db.prepare("SELECT date(clicked_at) as d,COUNT(*) as c FROM click_logs WHERE clicked_at>=date('now','-7 day') GROUP BY d ORDER BY d ASC").all(),hr=db.prepare("SELECT strftime('%H',clicked_at) as h,COUNT(*) as c FROM click_logs GROUP BY h ORDER BY h ASC").all();s.json({totalClicks:tc,topApps:top,timeline:tl,hourly:hr})}catch(e){s.status(500).json({error:e.message})}});
+app.get('/api/insights/export',(q,s)=>{try{const l=db.prepare(`SELECT cl.clicked_at,s.name,s.tenant,s.parent_label,s.child_label,s.clicks FROM click_logs cl LEFT JOIN shortcuts s ON cl.shortcut_id=s.id ORDER BY cl.clicked_at DESC`).all();const csv=['Time,App,Tenant,Group,Tags,Total_Clicks',...l.map(r=>`${r.clicked_at},"${(r.name||'Deleted').replace(/"/g,'""')}",${r.tenant},${r.parent_label||''},"${(r.child_label||'').replace(/"/g,'""')}",${r.clicks||0}`)].join('\\n');s.header('Content-Type','text/csv');s.attachment(`insights_full_${new Date().toISOString().slice(0,10)}.csv`);s.send(csv)}catch(e){s.status(500).send(e.message)}});
+app.post('/api/import',(q,s)=>{const{shortcuts:sc,labels:lb,tenant:t}=q.body||{},root=normalizeTenant(t),ins=db.prepare(`INSERT INTO shortcuts(tenant,name,url,icon_url,icon_64,icon_128,icon_256,parent_label,child_label,favorite,clicks)VALUES(?,?,?,?,?,?,?,?,?,?,?)ON CONFLICT(name,url,tenant)DO UPDATE SET icon_url=excluded.icon_url,icon_64=excluded.icon_64,icon_128=excluded.icon_128,icon_256=excluded.icon_256,parent_label=excluded.parent_label,child_label=excluded.child_label,favorite=MAX(shortcuts.favorite,excluded.favorite),clicks=shortcuts.clicks+excluded.clicks`),ups=db.prepare('INSERT OR REPLACE INTO label_colors(name,tenant,color_class)VALUES(?,?,?)');try{db.transaction(()=>{const aff=new Set();(Array.isArray(sc)?sc:[]).forEach(s=>{if(!s?.name||!s?.url)return;let ten=normalizeTenant(s.tenant||root);try{if(!new URL(s.url).protocol.startsWith('http'))return}catch{return}ins.run(ten,s.name.trim(),s.url.trim(),s.icon_url||'',s.icon_64||null,s.icon_128||null,s.icon_256||null,s.parent_label||'',s.child_label||'',s.favorite?1:0,Math.max(0,+s.clicks||0));aff.add(ten)});(Array.isArray(lb)?lb:[]).forEach(l=>{if(!l?.name)return;let ten=normalizeTenant(l.tenant||root);ups.run(l.name.trim(),ten,l.color_class||'');aff.add(ten)});aff.forEach(t=>cleanupOrphanLabels(t))})();s.json({success:true})}catch(e){s.status(500).json({error:e.message})}});
+app.get('/api/health',(q,s)=>s.json({status:'ok'}));app.get('*',(q,s)=>fs.existsSync(path.join(__dirname,'dist','index.html'))?s.sendFile(path.join(__dirname,'dist','index.html')):s.status(500).send('No build'));
+app.listen(PORT,'0.0.0.0',()=>console.log(`Server: ${PORT}`));
+"""
+
+# --- 2. FRONTEND CODE ---
+app_jsx_content = """import React,{useState,useEffect,useRef,useMemo}from'react';import{Save,Trash2,Plus,Search,Activity,Copy,Check,Settings,LogOut,X,Filter,Tag,Upload,Download,FileUp,Pencil,Star,Moon,Sun,LayoutGrid,List,Image as ImageIcon,RotateCcw,BarChart as ChartIcon,Palette,Type,RefreshCw}from'lucide-react';
 const COLOR_PRESETS=['#0A1A2F','#009FB8','#6D28D9','#BE123C','#059669','#C2410C','#475569'];const DEFAULT_LIGHT_TEXT='#2C2C2C',DEFAULT_DARK_TEXT='#E2E8F0';
 const getGradientStyle=h=>h?{background:`linear-gradient(135deg,${h},${h}dd)`}:{};
 const getContrastYIQ=(hex)=>{if(!hex)return'#fff';const h=hex.replace('#','');const r=parseInt(h.substr(0,2),16),g=parseInt(h.substr(2,2),16),b=parseInt(h.substr(4,2),16);return(((r*299)+(g*587)+(b*114))/1000)>=128?'#000':'#fff'};
@@ -209,3 +253,34 @@ export default function App(){
     </div>
   );
 }
+"""
+
+# --- 3. FILES MAP ---
+files = {
+    f"{PROJECT_NAME}/package.json": json.dumps({"name": "shortcut-manager", "type": "module", "scripts": {"dev": "vite", "build": "vite build", "start": "node server.js", "docker:build": "docker-compose up -d --build"}, "dependencies": {"express": "^4.18.2", "better-sqlite3": "^9.4.3", "cors": "^2.8.5", "lucide-react": "^0.344.0", "react": "^18.2.0", "react-dom": "^18.2.0", "sharp": "^0.33.2", "node-cron": "^3.0.3", "recharts": "^2.12.0" }, "devDependencies": {"@types/react": "^18.2.64", "@types/react-dom": "^18.2.21", "@vitejs/plugin-react": "^4.2.1", "autoprefixer": "^10.4.18", "postcss": "^8.4.35", "tailwindcss": "^3.4.1", "vite": "^5.1.4"}}, indent=0),
+    f"{PROJECT_NAME}/vite.config.js": f"import {{ defineConfig }} from 'vite'; import react from '@vitejs/plugin-react'; export default defineConfig({{ plugins: [react()], server: {{ proxy: {{ '/api': 'http://localhost:{PORT}' }} }} }});",
+    f"{PROJECT_NAME}/server.js": server_js_content,
+    f"{PROJECT_NAME}/index.html": "<!doctype html><html lang='en'><head><meta charset='UTF-8' /><link rel='icon' type='image/svg+xml' href='/vite.svg' /><meta name='viewport' content='width=device-width, initial-scale=1.0' /><title>Shortcut Manager</title><link href='https://fonts.googleapis.com/css2?family=Lexend+Deca:wght@300;400;500&display=swap' rel='stylesheet'></head><body><div id='root'></div><script type='module' src='/src/main.jsx'></script></body></html>",
+    f"{PROJECT_NAME}/src/main.jsx": "import React from 'react'; import ReactDOM from 'react-dom/client'; import App from './App.jsx'; import './index.css'; ReactDOM.createRoot(document.getElementById('root')).render(<React.StrictMode><App /></React.StrictMode>);",
+    f"{PROJECT_NAME}/src/App.jsx": app_jsx_content,
+    f"{PROJECT_NAME}/src/index.css": "@tailwind base; @tailwind components; @tailwind utilities; body { margin: 0; min-height: 100vh; } .dark { color-scheme: dark; }",
+    f"{PROJECT_NAME}/tailwind.config.js": "export default { content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'], darkMode: 'class', theme: { extend: { fontFamily: { sans: ['\"Lexend Deca\"', 'sans-serif'] } } }, plugins: [] };",
+    f"{PROJECT_NAME}/postcss.config.js": "export default { plugins: { tailwindcss: {}, autoprefixer: {} } };",
+    f"{PROJECT_NAME}/Dockerfile": f"FROM node:18-slim AS build\nRUN apt-get update && apt-get install -y --no-install-recommends python3 build-essential git && rm -rf /var/lib/apt/lists/*\nWORKDIR /app\nCOPY package*.json ./\nRUN npm install\nCOPY . .\nRUN npm run build\n\nFROM node:18-slim\nWORKDIR /app\nENV NODE_ENV=production\nRUN apt-get update && apt-get install -y --no-install-recommends libvips && rm -rf /var/lib/apt/lists/*\nCOPY package*.json ./\nRUN npm install --omit=dev\nCOPY --from=build /app/dist ./dist\nCOPY server.js .\nRUN mkdir -p /app/data /app/data/backup\nEXPOSE {PORT}\nCMD [\"node\", \"server.js\"]",
+    f"{PROJECT_NAME}/docker-compose.yml": f"version: '3.8'\nservices:\n  app:\n    build: .\n    container_name: shortcut-manager-app\n    ports: [\"{PORT}:{PORT}\"]\n    volumes: [\"./data:/app/data\"]\n    restart: always",
+    f"{PROJECT_NAME}/.gitignore": "node_modules\ndist\n.DS_Store\n.env\ndata/*\n!data/.gitkeep\n",
+}
+
+def create_project():
+    print(f"🔄 Creating {PROJECT_NAME}...")
+    if os.path.exists(PROJECT_NAME): shutil.rmtree(PROJECT_NAME)
+    os.makedirs(f"{PROJECT_NAME}/src", exist_ok=True)
+    os.makedirs(f"{PROJECT_NAME}/data", exist_ok=True)
+    with open(f"{PROJECT_NAME}/data/.gitkeep", "w") as f: f.write("")
+    for fp, c in files.items():
+        if os.path.dirname(fp) and not os.path.exists(os.path.dirname(fp)): os.makedirs(os.path.dirname(fp), exist_ok=True)
+        with open(fp, "w", encoding="utf-8") as f: f.write(c)
+        print(f"✅ Created: {fp}")
+    print(f"\n🎉 DONE! RUN:\n  1. cd {PROJECT_NAME}\n  2. docker-compose up -d --build\n  -> http://localhost:{PORT}")
+
+if __name__ == "__main__": create_project()
