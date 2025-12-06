@@ -1,4 +1,4 @@
-import React,{useState,useEffect,useRef,useMemo}from'react';import{Save,Trash2,Plus,Search,Activity,Copy,Check,Settings,LogOut,X,Filter,Tag,Upload,Download,FileUp,Pencil,Star,Moon,Sun,LayoutGrid,List,Image as ImageIcon,RotateCcw,BarChart as ChartIcon,Palette,Type}from'lucide-react';
+import React,{useState,useEffect,useRef,useMemo}from'react';import{Save,Trash2,Plus,Search,Activity,Copy,Check,Settings,LogOut,X,Filter,Tag,Upload,Download,FileUp,Pencil,Star,Moon,Sun,LayoutGrid,List,Image as ImageIcon,RotateCcw,BarChart as ChartIcon,Palette,Type,RefreshCw}from'lucide-react';
 const COLOR_PRESETS=['#0A1A2F','#009FB8','#6D28D9','#BE123C','#059669','#C2410C','#475569'];const DEFAULT_LIGHT_TEXT='#2C2C2C',DEFAULT_DARK_TEXT='#E2E8F0';
 const getGradientStyle=h=>h?{background:`linear-gradient(135deg,${h},${h}dd)`}:{};
 const getContrastYIQ=(hex)=>{if(!hex)return'#fff';const h=hex.replace('#','');const r=parseInt(h.substr(0,2),16),g=parseInt(h.substr(2,2),16),b=parseInt(h.substr(4,2),16);return(((r*299)+(g*587)+(b*114))/1000)>=128?'#000':'#fff'};
@@ -11,7 +11,35 @@ export default function App(){
   const fileInputRef=useRef(null),bgInputRef=useRef(null),importInputRef=useRef(null);
 
   useEffect(()=>{if(darkMode)document.documentElement.classList.add('dark');else document.documentElement.classList.remove('dark');localStorage.setItem('darkMode',darkMode)},[darkMode]);
-  const fetchData=async()=>{try{const r=await fetch('/api/data?tenant='+encodeURIComponent(tenant));const d=await r.json();const ss=d.shortcuts||[],ls=JSON.parse(localStorage.getItem('local_shortcuts')||'[]').map(s=>({...s,isLocal:true,child_label:(s.child_label||'').includes('Personal')?s.child_label:(s.child_label?(s.child_label+', Personal'):'Personal')}));setShortcuts([...ss,...ls]);setLabelColors(d.labelColors||{});const c=d.appConfig||{};setServerBg(c.default_background||null);if(c.text_color_light&&!localStorage.getItem('custom_text_light'))setLightTextColor(c.text_color_light);if(c.text_color_dark&&!localStorage.getItem('custom_text_dark'))setDarkTextColor(c.text_color_dark);const lbg=localStorage.getItem('custom_bg');setBgImage(lbg||c.default_background||null)}catch(e){console.error(e)}finally{setLoading(false)}};
+
+  const fetchData=async()=>{try{const r=await fetch('/api/data?tenant='+encodeURIComponent(tenant));const d=await r.json();const ss=d.shortcuts||[];const ls=JSON.parse(localStorage.getItem('local_shortcuts')||'[]').map(s=>({...s,isLocal:true,child_label:(s.child_label||'').includes('Personal')?s.child_label:(s.child_label?(s.child_label+', Personal'):'Personal')}));setShortcuts([...ss,...ls]);setLabelColors(d.labelColors||{});
+      // Config Sync Logic
+      const c=d.appConfig||{};
+      const serverVer=Number(c.config_version||0);
+      const localVer=Number(localStorage.getItem('config_version')||0);
+      
+      // FORCE SYNC TRIGGER
+      if(serverVer > localVer) {
+         console.log("Force sync triggered!");
+         localStorage.removeItem('custom_bg');
+         localStorage.removeItem('custom_text_light');
+         localStorage.removeItem('custom_text_dark');
+         localStorage.setItem('config_version', serverVer);
+         
+         // Apply server configs
+         setServerBg(c.default_background||null);
+         setBgImage(c.default_background||null);
+         setLightTextColor(c.text_color_light||DEFAULT_LIGHT_TEXT);
+         setDarkTextColor(c.text_color_dark||DEFAULT_DARK_TEXT);
+      } else {
+         // Normal load: Prefer Local > Server
+         setServerBg(c.default_background||null);
+         setBgImage(localStorage.getItem('custom_bg')||c.default_background||null);
+         setLightTextColor(localStorage.getItem('custom_text_light')||c.text_color_light||DEFAULT_LIGHT_TEXT);
+         setDarkTextColor(localStorage.getItem('custom_text_dark')||c.text_color_dark||DEFAULT_DARK_TEXT);
+      }
+    }catch(e){console.error(e)}finally{setLoading(false)}};
+
   useEffect(()=>{fetchData()},[tenant]);
   const saveConfig=async(k,v)=>{try{await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({[k]:v})})}catch{}};
   const handleTextColorChange=(m,c)=>{if(m==='light'){setLightTextColor(c);localStorage.setItem('custom_text_light',c)}else{setDarkTextColor(c);localStorage.setItem('custom_text_dark',c)}};
@@ -20,7 +48,33 @@ export default function App(){
   const handleExportStats=()=>{window.open('/api/insights/export','_blank')};
   const handleResetBg=()=>{localStorage.removeItem('custom_bg');setBgImage(serverBg);alert("Đã reset BG")};
   const resetForm=()=>setFormData({id:null,name:'',url:'',icon_url:'',parent_label:'',parent_color:COLOR_PRESETS[0],child_label:'',child_color:COLOR_PRESETS[1],isLocal:false});
-  const handleSubmit=async e=>{e.preventDefault();if(!formData.name.trim()||!formData.url.trim())return alert('Thiếu tên/URL');const isLocal=!isAdmin||formData.isLocal;if(isLocal){const l=JSON.parse(localStorage.getItem('local_shortcuts')||'[]');let nl;if(formData.id&&formData.isLocal)nl=l.map(s=>s.id===formData.id?{...formData,id:formData.id}:s);else nl=[{...formData,id:Date.now(),clicks:0,favorite:0},...l];localStorage.setItem('local_shortcuts',JSON.stringify(nl));fetchData();setShowAddModal(false);resetForm()}else{try{const r=await fetch(formData.id?`/api/shortcuts/${formData.id}`:'/api/shortcuts',{method:formData.id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(formData)});if(r.ok){await fetchData();setShowAddModal(false);resetForm()}}catch{alert('Lỗi Server')}}};
+  
+  const handleSubmit=async e=>{
+      e.preventDefault();
+      if(!formData.name.trim()||!formData.url.trim())return alert('Thiếu tên/URL');
+      
+      // AUTO FAVICON LOGIC
+      let iconToSave = formData.icon_url;
+      if (!iconToSave) {
+          try {
+              const urlObj = new URL(formData.url);
+              iconToSave = `https://www.google.com/s2/favicons?domain=${urlObj.hostname}&sz=128`;
+          } catch(e) {}
+      }
+
+      const payload = { ...formData, icon_url: iconToSave };
+      const isLocal=!isAdmin||formData.isLocal;
+      
+      if(isLocal){
+          const l=JSON.parse(localStorage.getItem('local_shortcuts')||'[]');let nl;
+          if(formData.id&&formData.isLocal)nl=l.map(s=>s.id===formData.id?{...payload,id:formData.id}:s);
+          else nl=[{...payload,id:Date.now(),clicks:0,favorite:0},...l];
+          localStorage.setItem('local_shortcuts',JSON.stringify(nl));fetchData();setShowAddModal(false);resetForm()
+      }else{
+          try{const r=await fetch(formData.id?`/api/shortcuts/${formData.id}`:'/api/shortcuts',{method:formData.id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});if(r.ok){await fetchData();setShowAddModal(false);resetForm()}}catch{alert('Lỗi Server')}
+      }
+  };
+
   const handleDelete=async id=>{if(!confirm('Xóa?'))return;const t=shortcuts.find(s=>s.id===id);if(t&&t.isLocal){const l=JSON.parse(localStorage.getItem('local_shortcuts')||'[]');localStorage.setItem('local_shortcuts',JSON.stringify(l.filter(s=>s.id!==id)));fetchData()}else if(isAdmin){await fetch(`/api/shortcuts/${id}`,{method:'DELETE'});fetchData()}};
   const handleToggleFavorite=async(id,e)=>{e.stopPropagation();const t=shortcuts.find(s=>s.id===id);if(t&&t.isLocal){const l=JSON.parse(localStorage.getItem('local_shortcuts')||'[]');localStorage.setItem('local_shortcuts',JSON.stringify(l.map(s=>s.id===id?{...s,favorite:s.favorite?0:1}:s)));fetchData()}else{await fetch(`/api/favorite/${id}`,{method:'POST'});fetchData()}};
   const handleLinkClick=(id,u)=>{const t=shortcuts.find(s=>s.id===id);if(!t?.isLocal)fetch(`/api/click/${id}`,{method:'POST'});window.open(u,'_blank')};
@@ -29,6 +83,17 @@ export default function App(){
   const handleImageUpload=e=>{const f=e.target.files[0];if(f){const r=new FileReader();r.onload=ev=>setFormData(p=>({...p,icon_url:ev.target.result}));r.readAsDataURL(f)}};
   const handleExportData=()=>{const d='data:text/json;charset=utf-8,'+encodeURIComponent(JSON.stringify({version:2,timestamp:new Date().toISOString(),shortcuts:shortcuts.filter(s=>!s.isLocal),labels:labelColors}));const a=document.createElement('a');a.href=d;a.download='backup.json';document.body.appendChild(a);a.click();a.remove()};
   const handleImportData=e=>{const f=e.target.files[0];if(f){const r=new FileReader();r.onload=async ev=>{await fetch('/api/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(JSON.parse(ev.target.result))});alert("Import OK!");fetchData()};r.readAsText(f)}};
+  
+  // FORCE SYNC HANDLER
+  const handleForceSync=async()=>{
+      if(confirm("Hành động này sẽ cập nhật phiên bản cấu hình trên Server. Mọi máy client (kể cả máy này) sẽ bị XÓA cache cấu hình cũ và tải cấu hình mới từ Admin trong lần tải lại trang tiếp theo. Tiếp tục?")) {
+          try {
+              await fetch('/api/config/force', { method: 'POST' });
+              alert("Đã gửi lệnh đồng bộ! Client sẽ nhận diện ở lần tải trang sau.");
+              fetchData(); // Re-fetch to get new version
+          } catch { alert("Lỗi sync"); }
+      }
+  };
 
   const uniqueParents=useMemo(()=>[...new Set(shortcuts.map(s=>s.parent_label).filter(Boolean))].sort(),[shortcuts]);
   const uniqueChildren=useMemo(()=>[...new Set(shortcuts.flatMap(s=>(s.child_label||'').split(',').map(t=>t.trim()).filter(Boolean)))].sort(),[shortcuts]);
@@ -48,7 +113,7 @@ export default function App(){
             <div className="flex-1 flex items-center gap-2 min-w-0">
                <div className="relative group w-full max-w-lg mx-auto transition-all">
                   <Search className="absolute inset-y-0 left-0 pl-3 h-full w-7 opacity-50" />
-                  <input type="text" className={`block w-full pl-10 pr-3 py-2 border rounded-full text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-[#009FB8] ${inputClass} ${bgImage?'bg-opacity-80 backdrop-blur-md':''}`} style={{color:currentTextColor}} placeholder="Tìm kiếm..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} />
+                  <input type="text" className={`block w-full pl-10 pr-3 py-2 border rounded-full text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-[#009FB8] ${inputClass} ${bgImage?'bg-opacity-60 backdrop-blur-md':'bg-opacity-60'}`} style={{color:currentTextColor}} placeholder="Tìm kiếm..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} />
                </div>
                <button onClick={()=>setShowFilterPanel(!showFilterPanel)} className={`p-2 rounded-full shadow-sm border ${inputClass} ${bgImage?'bg-opacity-80':''}`}><Filter size={18}/></button>
                <div className="hidden sm:flex items-center gap-1 bg-gray-200/50 dark:bg-gray-800/50 rounded-full p-1 backdrop-blur-sm">
@@ -91,6 +156,7 @@ export default function App(){
               <button onClick={()=>bgInputRef.current?.click()} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"><ImageIcon size={16}/></button><input type="file" ref={bgInputRef} className="hidden" accept="image/*" onChange={handleBgUpload}/>
               {isAdmin&&(<>
                 <button onClick={fetchInsights} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-orange-500"><ChartIcon size={16}/></button>
+                <button onClick={handleForceSync} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-purple-500" title="Đồng bộ Client"><RefreshCw size={16}/></button>
                 <button onClick={handleExportData} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-blue-500"><Download size={16}/></button>
                 <button onClick={()=>importInputRef.current?.click()} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-green-500"><FileUp size={16}/></button>
                 <input type="file" ref={importInputRef} className="hidden" accept=".json" onChange={handleImportData}/>
@@ -134,7 +200,7 @@ export default function App(){
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"><div className={`rounded-2xl shadow-2xl w-full max-w-xs p-6 border ${modalClass}`}><div className="flex justify-between items-center mb-6"><h3 className="font-bold">Admin</h3><button onClick={()=>setShowLoginModal(false)}><X size={20}/></button></div><form onSubmit={handleLogin} className="space-y-4"><input type="text" placeholder="User" className={`w-full px-4 py-2 rounded-lg text-sm border ${inputClass}`} value={loginCreds.username} onChange={e=>setLoginCreds({...loginCreds,username:e.target.value})}/><input type="password" placeholder="Pass" className={`w-full px-4 py-2 rounded-lg text-sm border ${inputClass}`} value={loginCreds.password} onChange={e=>setLoginCreds({...loginCreds,password:e.target.value})}/>{loginError&&<p className="text-red-500 text-xs">{loginError}</p>}<button className="w-full py-2 bg-[#0F2F55] text-white rounded-lg hover:bg-opacity-90">Login</button></form></div></div>
         )}
         {showAddModal&&(
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"><div className={`rounded-2xl shadow-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto border ${modalClass}`}><div className="flex justify-between items-center mb-4"><h3 className="font-bold">{formData.id?'Sửa':'Thêm'} App</h3><button onClick={()=>setShowAddModal(false)}><X size={20}/></button></div><form onSubmit={handleSubmit} className="space-y-3"><input type="text" placeholder="Tên" className={`w-full px-4 py-3 rounded-xl text-sm border ${inputClass}`} value={formData.name} onChange={e=>setFormData({...formData,name:e.target.value})} required/><input type="url" placeholder="URL" className={`w-full px-4 py-3 rounded-xl text-sm border ${inputClass}`} value={formData.url} onChange={e=>setFormData({...formData,url:e.target.value})} required/>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"><div className={`rounded-2xl shadow-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto border ${modalClass}`}><div className="flex justify-between items-center mb-4"><h3 className="font-bold">{formData.id?'Sửa':'Thêm'} App</h3><button onClick={()=>setShowAddModal(false)}><X size={20}/></button></div><form onSubmit={handleSubmit} className="space-y-3"><input type="text" placeholder="Tên" className={`w-full px-4 py-3 rounded-xl text-sm border ${inputClass}`} value={formData.name} onChange={e=>setFormData({...formData,name:e.target.value})} required/><input type="url" placeholder="URL" className={`w-full px-4 py-3 rounded-xl text-sm border ${inputClass}`} value={formData.url} onChange={e=>setFormData({...formData,url:e.target.value})} required/><p className="text-[10px] text-gray-400 ml-1 -mt-2">URL cần bắt đầu bằng https://</p>
           <div onClick={() => fileInputRef.current?.click()} className={`w-full px-4 py-3 rounded-xl cursor-pointer flex items-center gap-3 border ${inputClass} hover:opacity-80`}>{formData.icon_url?<img src={formData.icon_url} className="w-10 h-10 rounded border object-cover"/>:<div className="w-10 h-10 rounded bg-gray-500/20 flex items-center justify-center"><Upload size={20}/></div>}<div><p className="text-sm font-medium">Tải icon lên</p></div></div><input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageUpload}/>
           <input type="text" placeholder="Hoặc dán link ảnh (https://...)" className={`w-full px-4 py-2 rounded-xl text-sm border ${inputClass}`} value={formData.icon_url?.startsWith('data:')?'':formData.icon_url} onChange={e=>setFormData({...formData,icon_url:e.target.value})}/>
           <div className={`border-t pt-3 space-y-4 ${darkMode?'border-gray-700':'border-gray-200'}`}><div className="grid grid-cols-[1fr_auto] gap-2 items-center"><input type="text" placeholder="Nhóm lớn" className={`px-3 py-2 rounded-lg text-sm border ${inputClass}`} value={formData.parent_label} onChange={e=>setFormData({...formData,parent_label:e.target.value})}/><div className="relative w-8 h-8 rounded-full border overflow-hidden cursor-pointer"><input type="color" className="absolute -top-2 -left-2 w-12 h-12" value={formData.parent_color} onChange={e=>setFormData({...formData,parent_color:e.target.value})}/></div></div><div className="grid grid-cols-[1fr_auto] gap-2 items-center"><input type="text" placeholder="Nhóm con (cách nhau phẩy)" className={`px-3 py-2 rounded-lg text-sm border ${inputClass}`} value={formData.child_label} onChange={e=>setFormData({...formData,child_label:e.target.value})}/><div className="relative w-8 h-8 rounded-full border overflow-hidden cursor-pointer"><input type="color" className="absolute -top-2 -left-2 w-12 h-12" value={formData.child_color} onChange={e=>setFormData({...formData,child_color:e.target.value})}/></div></div></div><button className="w-full py-3 bg-[#0F2F55] text-white rounded-xl mt-2 hover:bg-opacity-90">Lưu</button></form></div></div>
