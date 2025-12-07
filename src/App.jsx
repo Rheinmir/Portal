@@ -4,10 +4,17 @@ const getGradientStyle=h=>h?{background:`linear-gradient(135deg,${h},${h}dd)`}:{
 const getContrastYIQ=(hex)=>{if(!hex)return'#fff';const h=hex.replace('#','');const r=parseInt(h.substr(0,2),16),g=parseInt(h.substr(2,2),16),b=parseInt(h.substr(4,2),16);return(((r*299)+(g*587)+(b*114))/1000)>=128?'#000':'#fff'};
 const normalizeTenant=t=>(t&&typeof t==='string'?t.trim():'')||'default';
 
+// PAGINATION CONFIG
+const ITEMS_PER_PAGE = 48;
+
 export default function App(){
   const[shortcuts,setShortcuts]=useState([]),[labelColors,setLabelColors]=useState({}),[loading,setLoading]=useState(true),[darkMode,setDarkMode]=useState(()=>localStorage.getItem('darkMode')==='true'),[bgImage,setBgImage]=useState(null),[serverBg,setServerBg]=useState(null),[overlayOpacity,setOverlayOpacity]=useState(()=>{const r=localStorage.getItem('overlayOpacity');const n=parseFloat(r);return isNaN(n)?0.5:n});
   const[lightTextColor,setLightTextColor]=useState(()=>localStorage.getItem('custom_text_light')||DEFAULT_LIGHT_TEXT),[darkTextColor,setDarkTextColor]=useState(()=>localStorage.getItem('custom_text_dark')||DEFAULT_DARK_TEXT);
   const[formData,setFormData]=useState({id:null,name:'',url:'',icon_url:'',parent_label:'',parent_color:COLOR_PRESETS[0],child_label:'',child_color:COLOR_PRESETS[1],isLocal:false}),[searchTerm,setSearchTerm]=useState(''),[showFilterPanel,setShowFilterPanel]=useState(false),[activeParentFilter,setActiveParentFilter]=useState(null),[activeChildFilter,setActiveChildFilter]=useState(null),[copiedId,setCopiedId]=useState(null),[isAdmin,setIsAdmin]=useState(false),[showLoginModal,setShowLoginModal]=useState(false),[showAddModal,setShowAddModal]=useState(false),[showInsightsModal,setShowInsightsModal]=useState(false),[insightsData,setInsightsData]=useState(null),[loginCreds,setLoginCreds]=useState({username:'',password:''}),[loginError,setLoginError]=useState(''),[sortBy,setSortBy]=useState('default'),[tenant,setTenant]=useState(()=>normalizeTenant(localStorage.getItem('tenant')));
+  
+  // PAGINATION STATE
+  const [currentPage,setCurrentPage]=useState(0),[touchStartX,setTouchStartX]=useState(null);
+
   const fileInputRef=useRef(null),bgInputRef=useRef(null),importInputRef=useRef(null);
 
   useEffect(()=>{if(darkMode)document.documentElement.classList.add('dark');else document.documentElement.classList.remove('dark');localStorage.setItem('darkMode',darkMode)},[darkMode]);
@@ -18,70 +25,29 @@ export default function App(){
       const localVer=Number(localStorage.getItem('config_version')||0);
       
       if(serverVer > localVer) {
-         localStorage.removeItem('custom_bg');
-         localStorage.removeItem('custom_text_light');
-         localStorage.removeItem('custom_text_dark');
-         localStorage.removeItem('overlayOpacity');
-         localStorage.removeItem('darkMode');
-         localStorage.setItem('config_version', serverVer);
-         setServerBg(c.default_background||null);
-         setBgImage(c.default_background||null);
-         setLightTextColor(c.text_color_light||DEFAULT_LIGHT_TEXT);
-         setDarkTextColor(c.text_color_dark||DEFAULT_DARK_TEXT);
-         const srvOpacity = c.overlay_opacity != null ? Number(c.overlay_opacity) : 0.5;
-         setOverlayOpacity(isNaN(srvOpacity) ? 0.5 : srvOpacity);
-         const srvDark = c.dark_mode_default === '1' || c.dark_mode_default === 'true';
-         setDarkMode(srvDark);
+         localStorage.removeItem('custom_bg');localStorage.removeItem('custom_text_light');localStorage.removeItem('custom_text_dark');localStorage.removeItem('overlayOpacity');localStorage.removeItem('darkMode');localStorage.setItem('config_version', serverVer);
+         setServerBg(c.default_background||null);setBgImage(c.default_background||null);setLightTextColor(c.text_color_light||DEFAULT_LIGHT_TEXT);setDarkTextColor(c.text_color_dark||DEFAULT_DARK_TEXT);
+         const srvOpacity = c.overlay_opacity != null ? Number(c.overlay_opacity) : 0.5; setOverlayOpacity(isNaN(srvOpacity) ? 0.5 : srvOpacity);
+         const srvDark = c.dark_mode_default === '1' || c.dark_mode_default === 'true'; setDarkMode(srvDark);
       } else {
-         setServerBg(c.default_background||null);
-         setBgImage(localStorage.getItem('custom_bg')||c.default_background||null);
-         setLightTextColor(localStorage.getItem('custom_text_light')||c.text_color_light||DEFAULT_LIGHT_TEXT);
-         setDarkTextColor(localStorage.getItem('custom_text_dark')||c.text_color_dark||DEFAULT_DARK_TEXT);
-         const localOpStr = localStorage.getItem('overlayOpacity');
-         const op = localOpStr != null ? Number(localOpStr) : (c.overlay_opacity != null ? Number(c.overlay_opacity) : 0.5);
-         setOverlayOpacity(isNaN(op) ? 0.5 : op);
-         const localDarkStr = localStorage.getItem('darkMode');
-         if (localDarkStr != null) setDarkMode(localDarkStr === 'true');
-         else {
-             const srvDark = c.dark_mode_default === '1' || c.dark_mode_default === 'true';
-             setDarkMode(srvDark);
-         }
+         setServerBg(c.default_background||null);setBgImage(localStorage.getItem('custom_bg')||c.default_background||null);setLightTextColor(localStorage.getItem('custom_text_light')||c.text_color_light||DEFAULT_LIGHT_TEXT);setDarkTextColor(localStorage.getItem('custom_text_dark')||c.text_color_dark||DEFAULT_DARK_TEXT);
+         const localOpStr = localStorage.getItem('overlayOpacity');const op = localOpStr != null ? Number(localOpStr) : (c.overlay_opacity != null ? Number(c.overlay_opacity) : 0.5);setOverlayOpacity(isNaN(op) ? 0.5 : op);
+         const localDarkStr = localStorage.getItem('darkMode');if (localDarkStr != null) setDarkMode(localDarkStr === 'true');else {const srvDark = c.dark_mode_default === '1' || c.dark_mode_default === 'true';setDarkMode(srvDark);}
       }
     }catch(e){console.error(e)}finally{setLoading(false)}};
 
   useEffect(()=>{fetchData()},[tenant]);
+  useEffect(()=>{setCurrentPage(0)},[searchTerm,activeParentFilter,activeChildFilter,sortBy,tenant]);
+
   const saveConfig=async(k,v)=>{try{await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({[k]:v})})}catch{}};
-  
-  const handleTextColorChange=(m,c)=>{
-    if(m==='light'){setLightTextColor(c);localStorage.setItem('custom_text_light',c);if(isAdmin)saveConfig('text_color_light',c)}
-    else{setDarkTextColor(c);localStorage.setItem('custom_text_dark',c);if(isAdmin)saveConfig('text_color_dark',c)}
-  };
-  
+  const handleTextColorChange=(m,c)=>{if(m==='light'){setLightTextColor(c);localStorage.setItem('custom_text_light',c);if(isAdmin)saveConfig('text_color_light',c)}else{setDarkTextColor(c);localStorage.setItem('custom_text_dark',c);if(isAdmin)saveConfig('text_color_dark',c)}};
   const handleBgUpload=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{const b=ev.target.result;setBgImage(b);if(isAdmin){if(confirm("Lưu mặc định server?")){saveConfig('default_background',b);alert("Đã lưu server!")}else localStorage.setItem('custom_bg',b)}else localStorage.setItem('custom_bg',b)};r.readAsDataURL(f)};
   const fetchInsights=async()=>{try{const r=await fetch('/api/insights');setInsightsData(await r.json());setShowInsightsModal(true)}catch{alert("Lỗi insights")}};
   const handleExportStats=()=>{window.open('/api/insights/export','_blank')};
   const handleResetBg=()=>{localStorage.removeItem('custom_bg');setBgImage(serverBg);alert("Đã reset BG")};
   const resetForm=()=>setFormData({id:null,name:'',url:'',icon_url:'',parent_label:'',parent_color:COLOR_PRESETS[0],child_label:'',child_color:COLOR_PRESETS[1],isLocal:false});
   
-  const handleSubmit=async e=>{
-      e.preventDefault();
-      if(!formData.name.trim()||!formData.url.trim())return alert('Thiếu tên/URL');
-      let iconToSave = formData.icon_url;
-      if (!iconToSave) {
-          try { const urlObj = new URL(formData.url); iconToSave = `https://www.google.com/s2/favicons?domain=${urlObj.hostname}&sz=128`; } catch(e) {}
-      }
-      const payload = { ...formData, icon_url: iconToSave };
-      const isLocal=!isAdmin||formData.isLocal;
-      if(isLocal){
-          const l=JSON.parse(localStorage.getItem('local_shortcuts')||'[]');let nl;
-          if(formData.id&&formData.isLocal)nl=l.map(s=>s.id===formData.id?{...payload,id:formData.id}:s);
-          else nl=[{...payload,id:Date.now(),clicks:0,favorite:0},...l];
-          localStorage.setItem('local_shortcuts',JSON.stringify(nl));fetchData();setShowAddModal(false);resetForm()
-      }else{
-          try{const r=await fetch(formData.id?`/api/shortcuts/${formData.id}`:'/api/shortcuts',{method:formData.id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});if(r.ok){await fetchData();setShowAddModal(false);resetForm()}}catch{alert('Lỗi Server')}
-      }
-  };
-
+  const handleSubmit=async e=>{e.preventDefault();if(!formData.name.trim()||!formData.url.trim())return alert('Thiếu tên/URL');let iconToSave = formData.icon_url;if (!iconToSave) {try { const urlObj = new URL(formData.url); iconToSave = `https://www.google.com/s2/favicons?domain=${urlObj.hostname}&sz=128`; } catch(e) {}}const payload = { ...formData, icon_url: iconToSave };const isLocal=!isAdmin||formData.isLocal;if(isLocal){const l=JSON.parse(localStorage.getItem('local_shortcuts')||'[]');let nl;if(formData.id&&formData.isLocal)nl=l.map(s=>s.id===formData.id?{...payload,id:formData.id}:s);else nl=[{...payload,id:Date.now(),clicks:0,favorite:0},...l];localStorage.setItem('local_shortcuts',JSON.stringify(nl));fetchData();setShowAddModal(false);resetForm()}else{try{const r=await fetch(formData.id?`/api/shortcuts/${formData.id}`:'/api/shortcuts',{method:formData.id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});if(r.ok){await fetchData();setShowAddModal(false);resetForm()}}catch{alert('Lỗi Server')}}};
   const handleDelete=async id=>{if(!confirm('Xóa?'))return;const t=shortcuts.find(s=>s.id===id);if(t&&t.isLocal){const l=JSON.parse(localStorage.getItem('local_shortcuts')||'[]');localStorage.setItem('local_shortcuts',JSON.stringify(l.filter(s=>s.id!==id)));fetchData()}else if(isAdmin){await fetch(`/api/shortcuts/${id}`,{method:'DELETE'});fetchData()}};
   const handleToggleFavorite=async(id,e)=>{e.stopPropagation();const t=shortcuts.find(s=>s.id===id);if(t&&t.isLocal){const l=JSON.parse(localStorage.getItem('local_shortcuts')||'[]');localStorage.setItem('local_shortcuts',JSON.stringify(l.map(s=>s.id===id?{...s,favorite:s.favorite?0:1}:s)));fetchData()}else{await fetch(`/api/favorite/${id}`,{method:'POST'});fetchData()}};
   const handleLinkClick=(id,u)=>{const t=shortcuts.find(s=>s.id===id);if(!t?.isLocal)fetch(`/api/click/${id}`,{method:'POST'});window.open(u,'_blank')};
@@ -91,35 +57,23 @@ export default function App(){
   const handleExportData=()=>{const d='data:text/json;charset=utf-8,'+encodeURIComponent(JSON.stringify({version:2,timestamp:new Date().toISOString(),shortcuts:shortcuts.filter(s=>!s.isLocal),labels:labelColors}));const a=document.createElement('a');a.href=d;a.download='backup.json';document.body.appendChild(a);a.click();a.remove()};
   const handleImportData=e=>{const f=e.target.files[0];if(f){const r=new FileReader();r.onload=async ev=>{await fetch('/api/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(JSON.parse(ev.target.result))});alert("Import OK!");fetchData()};r.readAsText(f)}};
   
-  const handleForceSync=async()=>{
-      if(!isAdmin)return;
-      if(confirm("Cập nhật cấu hình lên Server và ép Client tải lại?")){
-          try{
-              const p={
-                  text_color_light:lightTextColor,
-                  text_color_dark:darkTextColor,
-                  overlay_opacity:overlayOpacity,
-                  dark_mode_default:darkMode?'1':'0'
-              };
-              if(bgImage) p.default_background = bgImage;
-              const r=await fetch('/api/config/force',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});
-              const d=await r.json();
-              if(d.success){
-                  if(d.version)localStorage.setItem('config_version',d.version);
-                  alert("Đã đồng bộ!");
-                  fetchData();
-              }else alert("Lỗi: "+d.error);
-          }catch{alert("Lỗi sync")}
-      }
-  };
+  const handleForceSync=async()=>{if(!isAdmin)return;if(confirm("Cập nhật cấu hình lên Server và ép Client tải lại?")){try{const p={text_color_light:lightTextColor,text_color_dark:darkTextColor,overlay_opacity:overlayOpacity,dark_mode_default:darkMode?'1':'0'};if(bgImage) p.default_background = bgImage;const r=await fetch('/api/config/force',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});const d=await r.json();if(d.success){if(d.version)localStorage.setItem('config_version',d.version);alert("Đã đồng bộ!");fetchData()}else alert("Lỗi: "+d.error)}catch{alert("Lỗi sync")}}};
 
   const uniqueParents=useMemo(()=>[...new Set(shortcuts.map(s=>s.parent_label).filter(Boolean))].sort(),[shortcuts]);
   const uniqueChildren=useMemo(()=>[...new Set(shortcuts.flatMap(s=>(s.child_label||'').split(',').map(t=>t.trim()).filter(Boolean)))].sort(),[shortcuts]);
   const filteredShortcuts=useMemo(()=>{let r=shortcuts.filter(i=>{const t=searchTerm.trim().toLowerCase(),m=(!t||i.name.toLowerCase().includes(t))&&(!activeParentFilter||i.parent_label===activeParentFilter);if(!m)return false;if(activeChildFilter){const tags=(i.child_label||'').split(',').map(s=>s.trim());if(!tags.includes(activeChildFilter))return false}return true});r.sort((a,b)=>(b.favorite-a.favorite)||(sortBy==='alpha'?a.name.localeCompare(b.name):0));return r},[shortcuts,searchTerm,activeParentFilter,activeChildFilter,sortBy]);
 
+  // PAGINATION LOGIC
+  const totalPages=Math.max(1,Math.ceil(filteredShortcuts.length/ITEMS_PER_PAGE));
+  useEffect(()=>{if(currentPage>=totalPages)setCurrentPage(totalPages-1)},[totalPages,currentPage]);
+  const pagedShortcuts=useMemo(()=>filteredShortcuts.slice(currentPage*ITEMS_PER_PAGE,(currentPage+1)*ITEMS_PER_PAGE),[filteredShortcuts,currentPage]);
+  const goNext=()=>setCurrentPage(p=>Math.min(p+1,totalPages-1));
+  const goPrev=()=>setCurrentPage(p=>Math.max(p-1,0));
+
   const bgClass=darkMode?'bg-gray-900':'bg-[#F4F4F4]',currentTextColor=darkMode?darkTextColor:lightTextColor;
   const cardClass=darkMode?'bg-gray-800 border-gray-700 hover:border-blue-500':'bg-white border-[#D8D8D8] hover:border-[#009FB8]';
   const inputClass=darkMode?'bg-gray-800 border-gray-700':'bg-white border-[#D8D8D8]',modalClass=darkMode?'bg-gray-900 border-gray-700':'bg-white border-[#D8D8D8]';
+  const isLastPage=currentPage===totalPages-1;
   
   if(loading)return<div className={`min-h-screen flex items-center justify-center ${bgClass}`}><Activity className="w-8 h-8 animate-spin text-blue-500"/></div>;
 
@@ -148,22 +102,37 @@ export default function App(){
           )}
         </div>
 
-        <div className="max-w-7xl mx-auto px-6 pb-20 pt-8"><div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-4 justify-items-center">
-          {filteredShortcuts.map(i=>(<div key={i.id} className="group relative flex flex-col items-center w-full max-w-[100px] cursor-pointer active:scale-95 transition-transform" onClick={()=>handleLinkClick(i.id,i.url)}>
-            <div className="absolute -top-2 -right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10 scale-90"><button onClick={e=>{e.stopPropagation();setCopiedId(i.id);navigator.clipboard.writeText(i.url);setTimeout(()=>setCopiedId(null),1000)}} className={`p-1.5 rounded-full shadow-sm border ${cardClass} bg-opacity-90`}>{copiedId===i.id?<Check size={12} className="text-green-500"/>:<Copy size={12}/>}</button>{(isAdmin||i.isLocal)&&(<><button onClick={e=>handleEdit(i,e)} className={`p-1.5 rounded-full shadow-sm border ml-1 ${cardClass}`}><Pencil size={12}/></button><button onClick={e=>{e.stopPropagation();handleDelete(i.id)}} className={`p-1.5 rounded-full shadow-sm border ml-1 ${cardClass}`}><Trash2 size={12}/></button></>)}</div>
-            <button onClick={e=>handleToggleFavorite(i.id,e)} className={`absolute -top-1 -left-1 z-10 p-1 rounded-full transition-transform hover:scale-110 ${i.favorite?'text-yellow-400':'text-gray-300 opacity-0 group-hover:opacity-100'}`}><Star size={14} fill={i.favorite?"currentColor":"none"}/></button>
-            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-white text-2xl font-bold shadow-md hover:shadow-lg transition-all mb-2 overflow-hidden relative backdrop-blur-sm ${i.icon_url?'bg-transparent':'bg-gradient-to-br bg-opacity-90'}`} style={i.icon_url?{}:getGradientStyle(labelColors[i.parent_label]||'#0A1A2F')}>{i.icon_url?<img src={i.icon_url} className="w-full h-full object-contain"/>:<span>{i.name.charAt(0).toUpperCase()}</span>}</div>
-            <span className="text-xs text-center truncate w-full px-1 leading-tight font-light" style={{textShadow:bgImage?'0 1px 2px rgba(0,0,0,0.5)':'none'}}>{i.name}</span>
-            <div className="flex flex-wrap justify-center gap-1 mt-1 px-1">
-              {i.parent_label&&<span className="text-[8px] px-1 py-0.5 rounded-full text-white truncate max-w-[60px] shadow-sm mb-0.5" style={{background:labelColors[i.parent_label]||'#9CA3AF',color:getContrastYIQ(labelColors[i.parent_label]||'#9CA3AF')}}>{i.parent_label}</span>}
-              {(i.child_label||'').split(',').filter(Boolean).map(t=><span key={t} className={`text-[8px] px-1 py-0.5 rounded-full border truncate max-w-[60px] bg-white/50 backdrop-blur-sm ${darkMode?'border-gray-600':'border-gray-300'}`} style={{borderColor:labelColors[t?.trim()],color:labelColors[t?.trim()]||(darkMode?'#ddd':'#333')}}>{t.trim()}</span>)}
-            </div>
-          </div>))}
-          <div className="flex flex-col items-center w-full max-w-[100px] cursor-pointer group" onClick={()=>{resetForm();setShowAddModal(true)}}>
-            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all mb-2 backdrop-blur-sm bg-white/10 dark:bg-black/10 hover:bg-emerald-500/10`}><Plus size={24} className="opacity-50 font-light"/></div>
-            <span className="text-xs font-light opacity-50">Thêm App</span>
+        {/* GRID WITH GESTURES */}
+        <div 
+           className="max-w-7xl mx-auto px-6 pb-20 pt-8 min-h-[60vh]"
+           onWheel={e=>{const d=Math.abs(e.deltaX)>Math.abs(e.deltaY)?e.deltaX:e.deltaY;if(Math.abs(d)>40){if(d>0)goNext();else goPrev()}}}
+           onTouchStart={e=>setTouchStartX(e.touches[0].clientX)}
+           onTouchEnd={e=>{if(touchStartX===null)return;const d=e.changedTouches[0].clientX-touchStartX;if(Math.abs(d)>50){if(d<0)goNext();else goPrev()}setTouchStartX(null)}}
+        >
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-4 justify-items-center">
+            {pagedShortcuts.map(i=>(<div key={i.id} className="group relative flex flex-col items-center w-full max-w-[100px] cursor-pointer active:scale-95 transition-transform" onClick={()=>handleLinkClick(i.id,i.url)}>
+              <div className="absolute -top-2 -right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10 scale-90"><button onClick={e=>{e.stopPropagation();setCopiedId(i.id);navigator.clipboard.writeText(i.url);setTimeout(()=>setCopiedId(null),1000)}} className={`p-1.5 rounded-full shadow-sm border ${cardClass} bg-opacity-90`}>{copiedId===i.id?<Check size={12} className="text-green-500"/>:<Copy size={12}/>}</button>{(isAdmin||i.isLocal)&&(<><button onClick={e=>handleEdit(i,e)} className={`p-1.5 rounded-full shadow-sm border ml-1 ${cardClass}`}><Pencil size={12}/></button><button onClick={e=>{e.stopPropagation();handleDelete(i.id)}} className={`p-1.5 rounded-full shadow-sm border ml-1 ${cardClass}`}><Trash2 size={12}/></button></>)}</div>
+              <button onClick={e=>handleToggleFavorite(i.id,e)} className={`absolute -top-1 -left-1 z-10 p-1 rounded-full transition-transform hover:scale-110 ${i.favorite?'text-yellow-400':'text-gray-300 opacity-0 group-hover:opacity-100'}`}><Star size={14} fill={i.favorite?"currentColor":"none"}/></button>
+              <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-white text-2xl font-bold shadow-md hover:shadow-lg transition-all mb-2 overflow-hidden relative backdrop-blur-sm ${i.icon_url?'bg-transparent':'bg-gradient-to-br bg-opacity-90'}`} style={i.icon_url?{}:getGradientStyle(labelColors[i.parent_label]||'#0A1A2F')}>{i.icon_url?<img src={i.icon_url} className="w-full h-full object-contain"/>:<span>{i.name.charAt(0).toUpperCase()}</span>}</div>
+              <span className="text-xs text-center truncate w-full px-1 leading-tight font-light" style={{textShadow:bgImage?'0 1px 2px rgba(0,0,0,0.5)':'none'}}>{i.name}</span>
+              <div className="flex flex-wrap justify-center gap-1 mt-1 px-1">
+                {i.parent_label&&<span className="text-[8px] px-1 py-0.5 rounded-full text-white truncate max-w-[60px] shadow-sm mb-0.5" style={{background:labelColors[i.parent_label]||'#9CA3AF',color:getContrastYIQ(labelColors[i.parent_label]||'#9CA3AF')}}>{i.parent_label}</span>}
+                {(i.child_label||'').split(',').filter(Boolean).map(t=><span key={t} className={`text-[8px] px-1 py-0.5 rounded-full border truncate max-w-[60px] bg-white/50 backdrop-blur-sm ${darkMode?'border-gray-600':'border-gray-300'}`} style={{borderColor:labelColors[t?.trim()],color:labelColors[t?.trim()]||(darkMode?'#ddd':'#333')}}>{t.trim()}</span>)}
+              </div>
+            </div>))}
+            {isLastPage && (
+              <div className="flex flex-col items-center w-full max-w-[100px] cursor-pointer group" onClick={()=>{resetForm();setShowAddModal(true)}}>
+                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all mb-2 backdrop-blur-sm bg-white/10 dark:bg-black/10 hover:bg-emerald-500/10`}><Plus size={24} className="opacity-50 font-light"/></div>
+                <span className="text-xs font-light opacity-50">Thêm App</span>
+              </div>
+            )}
           </div>
-        </div></div>
+          {totalPages>1&&(
+             <div className="flex justify-center mt-8 gap-2">
+               {Array.from({length:totalPages}).map((_,i)=><button key={i} onClick={()=>setCurrentPage(i)} className={`h-1.5 rounded-full transition-all duration-300 ${i===currentPage?(darkMode?'w-6 bg-white':'w-6 bg-gray-800'):(darkMode?'w-2 bg-white/20':'w-2 bg-gray-400/40')}`}/>)}
+             </div>
+          )}
+        </div>
 
         <div className="fixed bottom-6 right-6 z-50 pointer-events-auto opacity-0 hover:opacity-100 transition-opacity duration-300">
           <div className="group/menu flex items-center justify-end gap-2 p-2 rounded-full hover:bg-white/20 hover:backdrop-blur-md transition-all">
@@ -186,7 +155,6 @@ export default function App(){
                 <button onClick={()=>setShowLoginModal(true)} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"><Settings size={18}/></button>
               </>)}
             </div></div>
-            <div className="w-10 h-10 flex items-center justify-center bg-white/20 backdrop-blur-md rounded-full border border-white/30 text-white shadow-lg cursor-pointer group-hover/menu:hidden absolute bottom-0 right-0 pointer-events-none"><Settings size={20} className="animate-spin-slow"/></div>
           </div>
         </div>
 

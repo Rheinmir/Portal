@@ -25,14 +25,18 @@ app.put('/api/shortcuts/:id',async(q,s)=>{try{const d=normPayload(q.body),id=+q.
 app.delete('/api/shortcuts/:id',(q,s)=>{try{const id=+q.params.id,r=db.prepare('SELECT tenant FROM shortcuts WHERE id=?').get(id);if(!r||!db.prepare('DELETE FROM shortcuts WHERE id=?').run(id).changes)return s.status(404).json({error:'Not found'});cleanupOrphanLabels(r.tenant);s.json({success:true})}catch(e){s.status(500).json({error:e.message})}});
 app.post('/api/click/:id',(q,s)=>{try{const id=+q.params.id;db.prepare('UPDATE shortcuts SET clicks=clicks+1 WHERE id=?').run(id);db.prepare('INSERT INTO click_logs(shortcut_id)VALUES(?)').run(id);s.json({success:true})}catch{s.status(500).json({error:'Error'})}});
 app.post('/api/favorite/:id',(q,s)=>{try{const id=+q.params.id,r=db.prepare('SELECT favorite FROM shortcuts WHERE id=?').get(id);if(!r)return s.status(404).json({error:'Not found'});const nv=r.favorite?0:1;db.prepare('UPDATE shortcuts SET favorite=? WHERE id=?').run(nv,id);s.json({success:true,favorite:nv})}catch{s.status(500).json({error:'Error'})}});
+
+// --- INSIGHTS ---
 app.get('/api/insights',(q,s)=>{try{
-  const totalClicks = db.prepare(`SELECT COUNT(*) as count FROM click_logs`).get().count;
-  const topApps = db.prepare(`SELECT s.name, COUNT(cl.id) as count FROM click_logs cl JOIN shortcuts s ON cl.shortcut_id = s.id GROUP BY s.name ORDER BY count DESC LIMIT 10`).all();
-  const timeline = db.prepare(`SELECT date(clicked_at) as d, COUNT(*) as count FROM click_logs WHERE clicked_at >= date('now','-7 day') GROUP BY d ORDER BY d ASC`).all();
-  const hourly = db.prepare(`SELECT strftime('%H', clicked_at) as h, COUNT(*) as count FROM click_logs GROUP BY h ORDER BY h ASC`).all();
-  s.json({ totalClicks, topApps, timeline, hourly });
+  const totalClicks = db.prepare(`SELECT COUNT(*) AS count FROM click_logs`).get().count;
+  const topApps = db.prepare(`SELECT s.name, COUNT(cl.id) AS count FROM click_logs cl JOIN shortcuts s ON cl.shortcut_id = s.id GROUP BY s.name ORDER BY count DESC LIMIT 10`).all();
+  const timeline = db.prepare(`SELECT DATE(clicked_at) AS d, COUNT(*) AS count FROM click_logs WHERE clicked_at >= DATE('now','-7 day') GROUP BY DATE(clicked_at) ORDER BY d ASC`).all();
+  s.json({ totalClicks, topApps, timeline });
 }catch(e){s.status(500).json({error:e.message})}});
+
+// EXPORT FULL DATA
 app.get('/api/insights/export',(q,s)=>{try{const l=db.prepare(`SELECT cl.clicked_at,s.name,s.tenant,s.parent_label,s.child_label,s.clicks FROM click_logs cl LEFT JOIN shortcuts s ON cl.shortcut_id=s.id ORDER BY cl.clicked_at DESC`).all();const csv=['Time,App,Tenant,Group,Tags,Total_Clicks',...l.map(r=>`${r.clicked_at},"${(r.name||'Deleted').replace(/"/g,'""')}",${r.tenant},${r.parent_label||''},"${(r.child_label||'').replace(/"/g,'""')}",${r.clicks||0}`)].join('\n');s.header('Content-Type','text/csv');s.attachment(`insights_full_${new Date().toISOString().slice(0,10)}.csv`);s.send(csv)}catch(e){s.status(500).send(e.message)}});
+
 app.post('/api/import',(q,s)=>{const{shortcuts:sc,labels:lb,tenant:t}=q.body||{},root=normalizeTenant(t),ins=db.prepare(`INSERT INTO shortcuts(tenant,name,url,icon_url,icon_64,icon_128,icon_256,parent_label,child_label,favorite,clicks)VALUES(?,?,?,?,?,?,?,?,?,?,?)ON CONFLICT(name,url,tenant)DO UPDATE SET icon_url=excluded.icon_url,icon_64=excluded.icon_64,icon_128=excluded.icon_128,icon_256=excluded.icon_256,parent_label=excluded.parent_label,child_label=excluded.child_label,favorite=MAX(shortcuts.favorite,excluded.favorite),clicks=shortcuts.clicks+excluded.clicks`),ups=db.prepare('INSERT OR REPLACE INTO label_colors(name,tenant,color_class)VALUES(?,?,?)');try{db.transaction(()=>{const aff=new Set();(Array.isArray(sc)?sc:[]).forEach(s=>{if(!s?.name||!s?.url)return;let ten=normalizeTenant(s.tenant||root);try{if(!new URL(s.url).protocol.startsWith('http'))return}catch{return}ins.run(ten,s.name.trim(),s.url.trim(),s.icon_url||'',s.icon_64||null,s.icon_128||null,s.icon_256||null,s.parent_label||'',s.child_label||'',s.favorite?1:0,Math.max(0,+s.clicks||0));aff.add(ten)});(Array.isArray(lb)?lb:[]).forEach(l=>{if(!l?.name)return;let ten=normalizeTenant(l.tenant||root);ups.run(l.name.trim(),ten,l.color_class||'');aff.add(ten)});aff.forEach(t=>cleanupOrphanLabels(t))})();s.json({success:true})}catch(e){s.status(500).json({error:e.message})}});
 app.get('/api/health',(q,s)=>s.json({status:'ok'}));app.get('*',(q,s)=>fs.existsSync(path.join(__dirname,'dist','index.html'))?s.sendFile(path.join(__dirname,'dist','index.html')):s.status(500).send('No build'));
 app.listen(PORT,'0.0.0.0',()=>console.log(`Server: ${PORT}`));
