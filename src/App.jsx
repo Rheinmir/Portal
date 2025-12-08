@@ -38,7 +38,12 @@ export default function App(){
   useEffect(()=>{setCurrentPage(0)},[searchTerm,activeParentFilter,activeChildFilter,sortBy,tenant]);
 
   const saveConfig=async(k,v)=>{try{await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({[k]:v})})}catch{}};
-  const handleTextColorChange=(m,c)=>{if(m==='light'){setLightTextColor(c);localStorage.setItem('custom_text_light',c);if(isAdmin)saveConfig('text_color_light',c)}else{setDarkTextColor(c);localStorage.setItem('custom_text_dark',c);if(isAdmin)saveConfig('text_color_dark',c)}};
+  
+  const handleTextColorChange=(m,c)=>{
+    if(m==='light'){setLightTextColor(c);localStorage.setItem('custom_text_light',c);if(isAdmin)saveConfig('text_color_light',c)}
+    else{setDarkTextColor(c);localStorage.setItem('custom_text_dark',c);if(isAdmin)saveConfig('text_color_dark',c)}
+  };
+  
   const handleBgUpload=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{const b=ev.target.result;setBgImage(b);if(isAdmin){if(confirm("Lưu mặc định server?")){saveConfig('default_background',b);alert("Đã lưu server!")}else localStorage.setItem('custom_bg',b)}else localStorage.setItem('custom_bg',b)};r.readAsDataURL(f)};
   const fetchInsights=async()=>{try{const r=await fetch('/api/insights');setInsightsData(await r.json());setShowInsightsModal(true)}catch{alert("Lỗi insights")}};
   const handleExportStats=()=>{window.open('/api/insights/export','_blank')};
@@ -151,7 +156,7 @@ export default function App(){
 
         <div 
           ref={gridWrapperRef}
-          className="max-w-7xl mx-auto px-6 pb-20 pt-8 min-h-[60vh]"
+          className="max-w-7xl mx-auto px-6 pb-32 pt-8 min-h-[60vh]"
           onWheel={e=>{const d=Math.abs(e.deltaX)>Math.abs(e.deltaY)?e.deltaX:e.deltaY;if(Math.abs(d)>40){if(d>0)goNext();else goPrev()}}}
           onTouchStart={e=>setTouchStartX(e.touches[0].clientX)}
           onTouchEnd={e=>{if(touchStartX===null)return;const d=e.changedTouches[0].clientX-touchStartX;if(Math.abs(d)>50){if(d<0)goNext();else goPrev()}setTouchStartX(null)}}
@@ -175,8 +180,8 @@ export default function App(){
           )}
         </div>
         {totalPages>1&&(
-          <div className="flex justify-center mt-8 gap-2">
-            {Array.from({length:totalPages}).map((_,i)=><button key={i} onClick={()=>setCurrentPage(i)} className={`h-1.5 rounded-full transition-all duration-300 ${i===currentPage?(darkMode?'w-6 bg-white':'w-6 bg-gray-800'):(darkMode?'w-2 bg-white/20':'w-2 bg-gray-400/40')}`}/>)}
+          <div className="flex justify-center mt-6 mb-4 gap-2">
+            {Array.from({length:totalPages}).map((_,i)=><button key={i} onClick={()=>setCurrentPage(i)} className={`w-2.5 h-2.5 rounded-full transition-all duration-200 border ${i===currentPage?(darkMode?'bg-white border-white scale-110':'bg-gray-800 border-gray-800 scale-110'):(darkMode?'border-white/40 bg-white/10':'border-gray-400/40 bg-gray-500/10')}`}/>)}
           </div>
         )}
         </div>
