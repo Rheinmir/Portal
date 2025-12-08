@@ -1,4 +1,4 @@
-import React,{useState,useEffect,useRef,useMemo}from'react';import{Save,Trash2,Plus,Search,Activity,Copy,Check,Settings,LogOut,X,Filter,Tag,Upload,Download,FileUp,Pencil,Star,Moon,Sun,LayoutGrid,List,Image as ImageIcon,RotateCcw,BarChart as ChartIcon,Palette,RefreshCw}from'lucide-react';
+import React,{useState,useEffect,useRef,useMemo}from'react';import{Save,Trash2,Plus,Search,Activity,Copy,Check,Settings,LogOut,X,Filter,Tag,Upload,Download,FileUp,Pencil,Star,Moon,Sun,LayoutGrid,List,Image as ImageIcon,RotateCcw,BarChart as ChartIcon,Palette,Type,RefreshCw}from'lucide-react';
 const COLOR_PRESETS=['#0A1A2F','#009FB8','#6D28D9','#BE123C','#059669','#C2410C','#475569'];const DEFAULT_LIGHT_TEXT='#2C2C2C',DEFAULT_DARK_TEXT='#E2E8F0';
 const getGradientStyle=h=>h?{background:`linear-gradient(135deg,${h},${h}dd)`}:{};
 const getContrastYIQ=(hex)=>{if(!hex)return'#fff';const h=hex.replace('#','');const r=parseInt(h.substr(0,2),16),g=parseInt(h.substr(2,2),16),b=parseInt(h.substr(4,2),16);return(((r*299)+(g*587)+(b*114))/1000)>=128?'#000':'#fff'};
@@ -12,10 +12,15 @@ export default function App(){
   
   // PAGINATION STATE
   const [currentPage,setCurrentPage]=useState(0),[touchStartX,setTouchStartX]=useState(null),[itemsPerPage,setItemsPerPage]=useState(DEFAULT_ITEMS_PER_PAGE);
+  
+  // DRAG DROP STATE
+  const [clientOrder,setClientOrder]=useState(()=>{const r=localStorage.getItem('shortcut_order_'+tenant);return r?JSON.parse(r):[]});
+  const [draggingId,setDraggingId]=useState(null);
 
   const fileInputRef=useRef(null),bgInputRef=useRef(null),importInputRef=useRef(null),gridWrapperRef=useRef(null),gridRef=useRef(null);
 
   useEffect(()=>{if(darkMode)document.documentElement.classList.add('dark');else document.documentElement.classList.remove('dark');localStorage.setItem('darkMode',darkMode)},[darkMode]);
+  useEffect(()=>{const r=localStorage.getItem('shortcut_order_'+tenant);setClientOrder(r?JSON.parse(r):[])},[tenant]);
 
   const fetchData=async()=>{try{const r=await fetch('/api/data?tenant='+encodeURIComponent(tenant));const d=await r.json();const ss=d.shortcuts||[];const ls=JSON.parse(localStorage.getItem('local_shortcuts')||'[]').map(s=>({...s,isLocal:true,child_label:(s.child_label||'').includes('Personal')?s.child_label:(s.child_label?(s.child_label+', Personal'):'Personal')}));setShortcuts([...ss,...ls]);setLabelColors(d.labelColors||{});
       const c=d.appConfig||{};
@@ -38,12 +43,7 @@ export default function App(){
   useEffect(()=>{setCurrentPage(0)},[searchTerm,activeParentFilter,activeChildFilter,sortBy,tenant]);
 
   const saveConfig=async(k,v)=>{try{await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({[k]:v})})}catch{}};
-  
-  const handleTextColorChange=(m,c)=>{
-    if(m==='light'){setLightTextColor(c);localStorage.setItem('custom_text_light',c);if(isAdmin)saveConfig('text_color_light',c)}
-    else{setDarkTextColor(c);localStorage.setItem('custom_text_dark',c);if(isAdmin)saveConfig('text_color_dark',c)}
-  };
-  
+  const handleTextColorChange=(m,c)=>{if(m==='light'){setLightTextColor(c);localStorage.setItem('custom_text_light',c);if(isAdmin)saveConfig('text_color_light',c)}else{setDarkTextColor(c);localStorage.setItem('custom_text_dark',c);if(isAdmin)saveConfig('text_color_dark',c)}};
   const handleBgUpload=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{const b=ev.target.result;setBgImage(b);if(isAdmin){if(confirm("Lưu mặc định server?")){saveConfig('default_background',b);alert("Đã lưu server!")}else localStorage.setItem('custom_bg',b)}else localStorage.setItem('custom_bg',b)};r.readAsDataURL(f)};
   const fetchInsights=async()=>{try{const r=await fetch('/api/insights');setInsightsData(await r.json());setShowInsightsModal(true)}catch{alert("Lỗi insights")}};
   const handleExportStats=()=>{window.open('/api/insights/export','_blank')};
@@ -80,18 +80,62 @@ export default function App(){
       if(!isAdmin)return;
       if(confirm("Cập nhật cấu hình lên Server và ép Client tải lại?")){
           try{
-              const p={text_color_light:lightTextColor,text_color_dark:darkTextColor,overlay_opacity:overlayOpacity,dark_mode_default:darkMode?'1':'0'};
+              const p={
+                  text_color_light:lightTextColor,
+                  text_color_dark:darkTextColor,
+                  overlay_opacity:overlayOpacity,
+                  dark_mode_default:darkMode?'1':'0'
+              };
               if(bgImage) p.default_background = bgImage;
               const r=await fetch('/api/config/force',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});
               const d=await r.json();
-              if(d.success){if(d.version)localStorage.setItem('config_version',d.version);alert("Đã đồng bộ!");fetchData()}else alert("Lỗi: "+d.error);
+              if(d.success){
+                 if(d.version)localStorage.setItem('config_version',d.version);
+                 
+                 // --- FIX REORDER SYNC ---
+                 // Build global ordered list for server shortcuts (ignore local)
+                 let serverList = shortcuts.filter(s => !s.isLocal);
+
+                 if (clientOrder.length) {
+                   const idxMap = new Map(clientOrder.map((id,i)=>[id,i]));
+                   serverList = [...serverList].sort((a,b)=>{
+                     const ia = idxMap.has(a.id)?idxMap.get(a.id):Infinity;
+                     const ib = idxMap.has(b.id)?idxMap.get(b.id):Infinity;
+                     if (ia !== ib) return ia - ib;
+                     // fallback
+                     return (b.favorite - a.favorite) || (sortBy==='alpha' ? a.name.localeCompare(b.name) : 0);
+                   });
+                 } else {
+                   serverList = [...serverList].sort((a,b)=>{
+                     return (b.favorite - a.favorite) || (sortBy==='alpha' ? a.name.localeCompare(b.name) : 0);
+                   });
+                 }
+
+                 const order = serverList.map(s=>s.id);
+                 await fetch('/api/reorder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tenant,order})});
+                 // ------------------------
+
+                 alert("Đã đồng bộ!");
+                 fetchData()
+              }else alert("Lỗi: "+d.error);
           }catch{alert("Lỗi sync")}
       }
   };
 
+  const handleDragStart=(e,id)=>{setDraggingId(id);e.dataTransfer.effectAllowed='move'};
+  const handleDragOver=e=>{e.preventDefault();e.dataTransfer.dropEffect='move'};
+  const handleDrop=(e,targetId)=>{e.preventDefault();if(!draggingId||draggingId===targetId)return;setClientOrder(prev=>{const baseIds=filteredShortcuts.map(s=>s.id);let current=prev&&prev.length?prev.filter(id=>baseIds.includes(id)):baseIds.slice();baseIds.forEach(id=>{if(!current.includes(id))current.push(id)});const from=current.indexOf(draggingId);const to=current.indexOf(targetId);if(from===-1||to===-1)return prev;const next=current.slice();next.splice(from,1);next.splice(to,0,draggingId);localStorage.setItem('shortcut_order_'+tenant,JSON.stringify(next));return next});setDraggingId(null)};
+  const handleDragEnd=()=>{setDraggingId(null)};
+
   const uniqueParents=useMemo(()=>[...new Set(shortcuts.map(s=>s.parent_label).filter(Boolean))].sort(),[shortcuts]);
   const uniqueChildren=useMemo(()=>[...new Set(shortcuts.flatMap(s=>(s.child_label||'').split(',').map(t=>t.trim()).filter(Boolean)))].sort(),[shortcuts]);
-  const filteredShortcuts=useMemo(()=>{let r=shortcuts.filter(i=>{const t=searchTerm.trim().toLowerCase(),m=(!t||i.name.toLowerCase().includes(t))&&(!activeParentFilter||i.parent_label===activeParentFilter);if(!m)return false;if(activeChildFilter){const tags=(i.child_label||'').split(',').map(s=>s.trim());if(!tags.includes(activeChildFilter))return false}return true});r.sort((a,b)=>(b.favorite-a.favorite)||(sortBy==='alpha'?a.name.localeCompare(b.name):0));return r},[shortcuts,searchTerm,activeParentFilter,activeChildFilter,sortBy]);
+  const filteredShortcuts=useMemo(()=>{
+      let r=shortcuts.filter(i=>{const t=searchTerm.trim().toLowerCase(),m=(!t||i.name.toLowerCase().includes(t))&&(!activeParentFilter||i.parent_label===activeParentFilter);if(!m)return false;if(activeChildFilter){const tags=(i.child_label||'').split(',').map(s=>s.trim());if(!tags.includes(activeChildFilter))return false}return true});
+      r.sort((a,b)=>(b.favorite-a.favorite)||(sortBy==='alpha'?a.name.localeCompare(b.name):0));
+      if(!clientOrder.length)return r;
+      const idxMap=new Map(clientOrder.map((id,i)=>[id,i]));
+      return[...r].sort((a,b)=>{const ia=idxMap.has(a.id)?idxMap.get(a.id):Infinity;const ib=idxMap.has(b.id)?idxMap.get(b.id):Infinity;if(ia!==ib)return ia-ib;return 0});
+  },[shortcuts,searchTerm,activeParentFilter,activeChildFilter,sortBy,clientOrder]);
 
   // DYNAMIC PAGINATION
   useEffect(()=>{
@@ -99,17 +143,12 @@ export default function App(){
       if (!gridWrapperRef.current || !gridRef.current) return;
       const style = getComputedStyle(gridRef.current);
       const colCount = style.gridTemplateColumns.split(' ').length || 1;
-      
       const cardEl = gridRef.current.querySelector('[data-card]');
-      const cardRect = cardEl ? cardEl.getBoundingClientRect() : null;
-      const cardHeight = cardRect ? cardRect.height : 140;
-
+      const cardHeight = cardEl ? cardEl.getBoundingClientRect().height : 140;
       const wrapperRect = gridWrapperRef.current.getBoundingClientRect();
       const availableHeight = window.innerHeight - wrapperRect.top - 80;
-
       const rows = Math.max(1, Math.floor(availableHeight / cardHeight));
-      const perPage = Math.max(colCount * rows, colCount);
-      setItemsPerPage(perPage);
+      setItemsPerPage(Math.max(colCount * rows, colCount));
     };
     calcItemsPerPage();
     window.addEventListener('resize', calcItemsPerPage);
@@ -154,15 +193,9 @@ export default function App(){
           )}
         </div>
 
-        <div 
-          ref={gridWrapperRef}
-          className="max-w-7xl mx-auto px-6 pb-32 pt-8 min-h-[60vh]"
-          onWheel={e=>{const d=Math.abs(e.deltaX)>Math.abs(e.deltaY)?e.deltaX:e.deltaY;if(Math.abs(d)>40){if(d>0)goNext();else goPrev()}}}
-          onTouchStart={e=>setTouchStartX(e.touches[0].clientX)}
-          onTouchEnd={e=>{if(touchStartX===null)return;const d=e.changedTouches[0].clientX-touchStartX;if(Math.abs(d)>50){if(d<0)goNext();else goPrev()}setTouchStartX(null)}}
-        >
+        <div ref={gridWrapperRef} className="max-w-7xl mx-auto px-6 pb-32 pt-8 min-h-[60vh]" onWheel={e=>{const d=Math.abs(e.deltaX)>Math.abs(e.deltaY)?e.deltaX:e.deltaY;if(Math.abs(d)>40){if(d>0)goNext();else goPrev()}}} onTouchStart={e=>setTouchStartX(e.touches[0].clientX)} onTouchEnd={e=>{if(touchStartX===null)return;const d=e.changedTouches[0].clientX-touchStartX;if(Math.abs(d)>50){if(d<0)goNext();else goPrev()}setTouchStartX(null)}}>
           <div ref={gridRef} className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-4 justify-items-center">
-          {pagedShortcuts.map(i=>(<div key={i.id} data-card className="group relative flex flex-col items-center w-full max-w-[100px] cursor-pointer active:scale-95 transition-transform" onClick={()=>handleLinkClick(i.id,i.url)}>
+          {pagedShortcuts.map(i=>(<div key={i.id} data-card draggable onDragStart={e=>handleDragStart(e,i.id)} onDragOver={handleDragOver} onDrop={e=>handleDrop(e,i.id)} onDragEnd={handleDragEnd} className={`group relative flex flex-col items-center w-full max-w-[100px] cursor-pointer active:scale-95 transition-transform ${draggingId===i.id?'opacity-50 scale-90':''}`} onClick={()=>handleLinkClick(i.id,i.url)}>
             <div className="absolute -top-2 -right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10 scale-90"><button onClick={e=>{e.stopPropagation();setCopiedId(i.id);navigator.clipboard.writeText(i.url);setTimeout(()=>setCopiedId(null),1000)}} className={`p-1.5 rounded-full shadow-sm border ${cardClass} bg-opacity-90`}>{copiedId===i.id?<Check size={12} className="text-green-500"/>:<Copy size={12}/>}</button>{(isAdmin||i.isLocal)&&(<><button onClick={e=>handleEdit(i,e)} className={`p-1.5 rounded-full shadow-sm border ml-1 ${cardClass}`}><Pencil size={12}/></button><button onClick={e=>{e.stopPropagation();handleDelete(i.id)}} className={`p-1.5 rounded-full shadow-sm border ml-1 ${cardClass}`}><Trash2 size={12}/></button></>)}</div>
             <button onClick={e=>handleToggleFavorite(i.id,e)} className={`absolute -top-1 -left-1 z-10 p-1 rounded-full transition-transform hover:scale-110 ${i.favorite?'text-yellow-400':'text-gray-300 opacity-0 group-hover:opacity-100'}`}><Star size={14} fill={i.favorite?"currentColor":"none"}/></button>
             <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-white text-2xl font-bold shadow-md hover:shadow-lg transition-all mb-2 overflow-hidden relative backdrop-blur-sm ${i.icon_url?'bg-transparent':'bg-gradient-to-br bg-opacity-90'}`} style={i.icon_url?{}:getGradientStyle(labelColors[i.parent_label]||'#0A1A2F')}>{i.icon_url?<img src={i.icon_url} className="w-full h-full object-contain"/>:<span>{i.name.charAt(0).toUpperCase()}</span>}</div>

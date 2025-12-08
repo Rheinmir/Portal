@@ -6,9 +6,10 @@ const db=new Database(dbPath);db.pragma('journal_mode = WAL');
 
 // --- AUTO MIGRATION ---
 const ensureColumn=(t,d)=>{const[c]=d.split(" ");try{if(!db.prepare(`PRAGMA table_info(${t})`).all().some(x=>x.name===c)){console.log(`Adding ${c} to ${t}`);db.prepare(`ALTER TABLE ${t} ADD COLUMN ${d}`).run()}}catch(e){console.error(e)}};
-ensureColumn("shortcuts","tenant TEXT NOT NULL DEFAULT 'default'");ensureColumn("shortcuts","icon_64 TEXT");ensureColumn("shortcuts","icon_128 TEXT");ensureColumn("shortcuts","icon_256 TEXT");ensureColumn("shortcuts","parent_label TEXT");ensureColumn("shortcuts","child_label TEXT");ensureColumn("shortcuts","favorite INTEGER DEFAULT 0");ensureColumn("shortcuts","clicks INTEGER DEFAULT 0");ensureColumn("shortcuts","created_at DATETIME DEFAULT CURRENT_TIMESTAMP");ensureColumn("label_colors","tenant TEXT NOT NULL DEFAULT 'default'");ensureColumn("label_colors","color_class TEXT");ensureColumn("admins","role TEXT NOT NULL DEFAULT 'admin'");
+ensureColumn("shortcuts","tenant TEXT NOT NULL DEFAULT 'default'");ensureColumn("shortcuts","icon_64 TEXT");ensureColumn("shortcuts","icon_128 TEXT");ensureColumn("shortcuts","icon_256 TEXT");ensureColumn("shortcuts","parent_label TEXT");ensureColumn("shortcuts","child_label TEXT");ensureColumn("shortcuts","favorite INTEGER DEFAULT 0");ensureColumn("shortcuts","clicks INTEGER DEFAULT 0");ensureColumn("shortcuts","created_at DATETIME DEFAULT CURRENT_TIMESTAMP");ensureColumn("shortcuts","sort_index INTEGER DEFAULT 0");
+ensureColumn("label_colors","tenant TEXT NOT NULL DEFAULT 'default'");ensureColumn("label_colors","color_class TEXT");ensureColumn("admins","role TEXT NOT NULL DEFAULT 'admin'");
 
-db.exec(`CREATE TABLE IF NOT EXISTS shortcuts(id INTEGER PRIMARY KEY AUTOINCREMENT,tenant TEXT NOT NULL DEFAULT 'default',name TEXT NOT NULL,url TEXT NOT NULL,icon_url TEXT,icon_64 TEXT,icon_128 TEXT,icon_256 TEXT,parent_label TEXT,child_label TEXT,favorite INTEGER DEFAULT 0,clicks INTEGER DEFAULT 0,created_at DATETIME DEFAULT CURRENT_TIMESTAMP);CREATE TABLE IF NOT EXISTS label_colors(name TEXT NOT NULL,tenant TEXT NOT NULL DEFAULT 'default',color_class TEXT,PRIMARY KEY(name,tenant));CREATE TABLE IF NOT EXISTS admins(username TEXT PRIMARY KEY,password_hash TEXT NOT NULL,role TEXT NOT NULL DEFAULT 'admin');CREATE TABLE IF NOT EXISTS app_config(key TEXT PRIMARY KEY,value TEXT);CREATE TABLE IF NOT EXISTS click_logs(id INTEGER PRIMARY KEY AUTOINCREMENT,shortcut_id INTEGER,clicked_at DATETIME DEFAULT CURRENT_TIMESTAMP);CREATE UNIQUE INDEX IF NOT EXISTS idx_shortcuts_name_url_tenant ON shortcuts(name,url,tenant);`);
+db.exec(`CREATE TABLE IF NOT EXISTS shortcuts(id INTEGER PRIMARY KEY AUTOINCREMENT,tenant TEXT NOT NULL DEFAULT 'default',name TEXT NOT NULL,url TEXT NOT NULL,icon_url TEXT,icon_64 TEXT,icon_128 TEXT,icon_256 TEXT,parent_label TEXT,child_label TEXT,favorite INTEGER DEFAULT 0,clicks INTEGER DEFAULT 0,created_at DATETIME DEFAULT CURRENT_TIMESTAMP,sort_index INTEGER DEFAULT 0);CREATE TABLE IF NOT EXISTS label_colors(name TEXT NOT NULL,tenant TEXT NOT NULL DEFAULT 'default',color_class TEXT,PRIMARY KEY(name,tenant));CREATE TABLE IF NOT EXISTS admins(username TEXT PRIMARY KEY,password_hash TEXT NOT NULL,role TEXT NOT NULL DEFAULT 'admin');CREATE TABLE IF NOT EXISTS app_config(key TEXT PRIMARY KEY,value TEXT);CREATE TABLE IF NOT EXISTS click_logs(id INTEGER PRIMARY KEY AUTOINCREMENT,shortcut_id INTEGER,clicked_at DATETIME DEFAULT CURRENT_TIMESTAMP);CREATE UNIQUE INDEX IF NOT EXISTS idx_shortcuts_name_url_tenant ON shortcuts(name,url,tenant);`);
 if(!db.prepare('SELECT COUNT(*) as c FROM admins').get().c)db.prepare('INSERT INTO admins(username,password_hash,role)VALUES(?,?,?)').run('admin',crypto.createHash('sha256').update('miniappadmin').digest('hex'),'superadmin');
 const normalizeTenant=t=>(t&&typeof t==='string'?t.trim():'')||'default';
 const cleanupOrphanLabels=t=>{const ten=normalizeTenant(t),used=new Set();db.prepare('SELECT parent_label,child_label FROM shortcuts WHERE tenant=?').all(ten).forEach(s=>{if(s.parent_label)used.add(s.parent_label);if(s.child_label)s.child_label.split(',').forEach(x=>used.add(x.trim()))});const all=db.prepare('SELECT name FROM label_colors WHERE tenant=?').all(ten);const del=db.prepare('DELETE FROM label_colors WHERE name=? AND tenant=?');all.forEach(l=>{if(!used.has(l.name)&&l.name!=='')del.run(l.name,ten)})};
@@ -17,9 +18,45 @@ const genThumb=async u=>{if(!u||!u.startsWith('data:image'))return{icon_64:null,
 
 // API
 app.post('/api/login',(q,s)=>{try{const{username,password}=q.body||{},r=db.prepare('SELECT * FROM admins WHERE username=?').get(username?.trim());if(!r||crypto.createHash('sha256').update(password||'').digest('hex')!==r.password_hash)return s.status(401).json({error:'Auth failed'});s.json({success:true,role:r.role||'admin'})}catch(e){s.status(500).json({error:e.message})}});
-app.get('/api/data',(q,s)=>{try{const t=normalizeTenant(q.query.tenant),sc=db.prepare('SELECT * FROM shortcuts WHERE tenant=? ORDER BY favorite DESC, created_at DESC, id DESC').all(t),lc=db.prepare('SELECT name,color_class FROM label_colors WHERE tenant=?').all(t),cfg=db.prepare('SELECT key,value FROM app_config').all(),lcm={},ac={};lc.forEach(l=>lcm[l.name]=l.color_class);cfg.forEach(c=>ac[c.key]=c.value);s.json({shortcuts:sc,labelColors:lcm,appConfig:ac,tenant:t})}catch(e){s.status(500).json({error:e.message})}});
+app.get('/api/data',(q,s)=>{try{const t=normalizeTenant(q.query.tenant),sc=db.prepare('SELECT * FROM shortcuts WHERE tenant=? ORDER BY favorite DESC, sort_index ASC, created_at DESC').all(t),lc=db.prepare('SELECT name,color_class FROM label_colors WHERE tenant=?').all(t),cfg=db.prepare('SELECT key,value FROM app_config').all(),lcm={},ac={};lc.forEach(l=>lcm[l.name]=l.color_class);cfg.forEach(c=>ac[c.key]=c.value);s.json({shortcuts:sc,labelColors:lcm,appConfig:ac,tenant:t})}catch(e){s.status(500).json({error:e.message})}});
 app.post('/api/config',(q,s)=>{try{const c=q.body,st=db.prepare('INSERT OR REPLACE INTO app_config(key,value)VALUES(?,?)');db.transaction(()=>{for(const[k,v]of Object.entries(c))st.run(k,String(v))})();s.json({success:true})}catch(e){s.status(500).json({error:e.message})}});
-app.post('/api/config/force',(q,s)=>{try{const cfg=q.body||{};const version=Date.now().toString();const st=db.prepare('INSERT OR REPLACE INTO app_config(key,value)VALUES(?,?)');db.transaction(()=>{for(const[k,v]of Object.entries(cfg)){st.run(k,String(v))}st.run('config_version',version)})();s.json({success:true,version})}catch(e){s.status(500).json({error:e.message})}});
+
+// FORCE SYNC API
+app.post('/api/config/force',(q,s)=>{
+  try {
+    const cfg = q.body || {};
+    const version = Date.now().toString();
+    const st = db.prepare('INSERT OR REPLACE INTO app_config(key,value)VALUES(?,?)');
+    db.transaction(()=>{
+      for (const [k,v] of Object.entries(cfg)) {
+        st.run(k, String(v));
+      }
+      st.run('config_version', version);
+    })();
+    s.json({success:true,version});
+  } catch(e) {
+    s.status(500).json({error:e.message});
+  }
+});
+
+// REORDER API
+app.post('/api/reorder',(q,s)=>{
+  try {
+    const { order, tenant } = q.body || {};
+    const ten = normalizeTenant(tenant);
+    if (!Array.isArray(order)) return s.status(400).json({error:'Invalid order'});
+    const stmt = db.prepare('UPDATE shortcuts SET sort_index=? WHERE id=? AND tenant=?');
+    db.transaction(()=>{
+      order.forEach((id, idx)=>{
+        stmt.run(idx + 1, id, ten);
+      });
+    })();
+    s.json({success:true});
+  } catch(e) {
+    s.status(500).json({error:e.message});
+  }
+});
+
 app.post('/api/shortcuts',async(q,s)=>{try{const d=normPayload(q.body),th=await genThumb(d.icon_url);db.prepare(`INSERT INTO shortcuts(tenant,name,url,icon_url,icon_64,icon_128,icon_256,parent_label,child_label,favorite,clicks)VALUES(?,?,?,?,?,?,?,?,?,0,0)ON CONFLICT(name,url,tenant)DO UPDATE SET icon_url=excluded.icon_url,icon_64=excluded.icon_64,icon_128=excluded.icon_128,icon_256=excluded.icon_256,parent_label=excluded.parent_label,child_label=excluded.child_label`).run(d.tenant,d.name,d.url,d.icon_url,th.icon_64,th.icon_128,th.icon_256,d.parent_label,d.child_label);const ups=db.prepare('INSERT OR REPLACE INTO label_colors(name,tenant,color_class)VALUES(?,?,?)');if(d.parent_label&&d.parent_color)ups.run(d.parent_label,d.tenant,d.parent_color);if(d.child_label&&d.child_color)d.child_label.split(',').forEach(t=>ups.run(t.trim(),d.tenant,d.child_color));s.json({success:true})}catch(e){s.status(400).json({error:e.message})}});
 app.put('/api/shortcuts/:id',async(q,s)=>{try{const d=normPayload(q.body),id=+q.params.id,th=await genThumb(d.icon_url);if(!db.prepare(`UPDATE shortcuts SET name=?,url=?,icon_url=?,icon_64=?,icon_128=?,icon_256=?,parent_label=?,child_label=? WHERE id=? AND tenant=?`).run(d.name,d.url,d.icon_url,th.icon_64,th.icon_128,th.icon_256,d.parent_label,d.child_label,id,d.tenant).changes)return s.status(404).json({error:'Not found'});const ups=db.prepare('INSERT OR REPLACE INTO label_colors(name,tenant,color_class)VALUES(?,?,?)');if(d.parent_label&&d.parent_color)ups.run(d.parent_label,d.tenant,d.parent_color);if(d.child_label&&d.child_color)d.child_label.split(',').forEach(t=>ups.run(t.trim(),d.tenant,d.child_color));cleanupOrphanLabels(d.tenant);s.json({success:true})}catch(e){s.status(400).json({error:e.message})}});
 app.delete('/api/shortcuts/:id',(q,s)=>{try{const id=+q.params.id,r=db.prepare('SELECT tenant FROM shortcuts WHERE id=?').get(id);if(!r||!db.prepare('DELETE FROM shortcuts WHERE id=?').run(id).changes)return s.status(404).json({error:'Not found'});cleanupOrphanLabels(r.tenant);s.json({success:true})}catch(e){s.status(500).json({error:e.message})}});
