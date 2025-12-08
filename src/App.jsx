@@ -5,10 +5,19 @@ const getContrastYIQ=(hex)=>{if(!hex)return'#fff';const h=hex.replace('#','');co
 const normalizeTenant=t=>(t&&typeof t==='string'?t.trim():'')||'default';
 const DEFAULT_ITEMS_PER_PAGE=48;const isVideoFile=s=>typeof s==='string'&&/\.(mp4|webm|ogg)(\?|$)/i.test(s);const isYoutubeEmbed=s=>typeof s==='string'&&s.includes('youtube.com/embed/');
 
+function normalizeYoutube(url) {
+  if (!url) return url;
+  const watch = url.match(/v=([^&]+)/);
+  if (watch) return `https://www.youtube.com/embed/${watch[1]}`;
+  const short = url.match(/youtu\.be\/([^?]+)/);
+  if (short) return `https://www.youtube.com/embed/${short[1]}`;
+  return url;
+}
+
 export default function App(){
   const[shortcuts,setShortcuts]=useState([]),[labelColors,setLabelColors]=useState({}),[loading,setLoading]=useState(true),[darkMode,setDarkMode]=useState(()=>localStorage.getItem('darkMode')==='true'),[bgImage,setBgImage]=useState(null),[serverBg,setServerBg]=useState(null),[bgVideo,setBgVideo]=useState(null),[bgEmbed,setBgEmbed]=useState(null),[overlayOpacity,setOverlayOpacity]=useState(()=>{const r=localStorage.getItem('overlayOpacity');const n=parseFloat(r);return isNaN(n)?0.5:n});
   const[lightTextColor,setLightTextColor]=useState(()=>localStorage.getItem('custom_text_light')||DEFAULT_LIGHT_TEXT),[darkTextColor,setDarkTextColor]=useState(()=>localStorage.getItem('custom_text_dark')||DEFAULT_DARK_TEXT);
-  const[formData,setFormData]=useState({id:null,name:'',url:'',icon_url:'',parent_label:'',parent_color:COLOR_PRESETS[0],child_label:'',child_color:COLOR_PRESETS[1],isLocal:false}),[searchTerm,setSearchTerm]=useState(''),[showFilterPanel,setShowFilterPanel]=useState(false),[activeParentFilter,setActiveParentFilter]=useState(null),[activeChildFilter,setActiveChildFilter]=useState(null),[copiedId,setCopiedId]=useState(null),[isAdmin,setIsAdmin]=useState(false),[showLoginModal,setShowLoginModal]=useState(false),[showAddModal,setShowAddModal]=useState(false),[showInsightsModal,setShowInsightsModal]=useState(false),[insightsData,setInsightsData]=useState(null),[loginCreds,setLoginCreds]=useState({username:'',password:''}),[loginError,setLoginError]=useState(''),[sortBy,setSortBy]=useState('default'),[tenant,setTenant]=useState(()=>normalizeTenant(localStorage.getItem('tenant'))),[bgUrlInput,setBgUrlInput]=useState('');
+  const[formData,setFormData]=useState({id:null,name:'',url:'',icon_url:'',parent_label:'',parent_color:COLOR_PRESETS[0],child_label:'',child_color:COLOR_PRESETS[1],isLocal:false}),[searchTerm,setSearchTerm]=useState(''),[showFilterPanel,setShowFilterPanel]=useState(false),[activeParentFilter,setActiveParentFilter]=useState(null),[activeChildFilter,setActiveChildFilter]=useState(null),[copiedId,setCopiedId]=useState(null),[isAdmin,setIsAdmin]=useState(false),[showLoginModal,setShowLoginModal]=useState(false),[showAddModal,setShowAddModal]=useState(false),[showInsightsModal,setShowInsightsModal]=useState(false),[insightsData,setInsightsData]=useState(null),[loginCreds,setLoginCreds]=useState({username:'',password:''}),[loginError,setLoginError]=useState(''),[sortBy,setSortBy]=useState('default'),[tenant,setTenant]=useState(()=>normalizeTenant(localStorage.getItem('tenant')));
   const [currentPage,setCurrentPage]=useState(0),[touchStartX,setTouchStartX]=useState(null),[itemsPerPage,setItemsPerPage]=useState(DEFAULT_ITEMS_PER_PAGE);
   const [clientOrder,setClientOrder]=useState(()=>{const r=localStorage.getItem('shortcut_order_'+tenant);return r?JSON.parse(r):[]}),[draggingId,setDraggingId]=useState(null);
   const fileInputRef=useRef(null),bgInputRef=useRef(null),importInputRef=useRef(null),gridWrapperRef=useRef(null),gridRef=useRef(null);
@@ -27,9 +36,56 @@ export default function App(){
   const saveConfig=async(k,v)=>{try{await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({[k]:v})})}catch{}};
   const handleTextColorChange=(m,c)=>{if(m==='light'){setLightTextColor(c);localStorage.setItem('custom_text_light',c);if(isAdmin)saveConfig('text_color_light',c)}else{setDarkTextColor(c);localStorage.setItem('custom_text_dark',c);if(isAdmin)saveConfig('text_color_dark',c)}};
   const handleBgUpload=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{const b=ev.target.result;setBgVideo(null);setBgEmbed(null);setBgImage(b);if(isAdmin){if(confirm("Lưu mặc định server?")){saveConfig('default_background',b);alert("Đã lưu server!")}else localStorage.setItem('custom_bg',b)}else localStorage.setItem('custom_bg',b)};r.readAsDataURL(f)};
-  const applyBgUrl=()=>{const url=bgUrlInput.trim();if(!url)return;applyBackgroundSource(url);if(isAdmin&&confirm("Lưu mặc định server?")){saveConfig('default_background',url);alert("Đã lưu server!")}else localStorage.setItem('custom_bg',url)};
+  
+  const applyBgUrl=()=>{
+    const url = normalizeYoutube(bgUrlInput.trim());
+    if(!url)return;
+    applyBackgroundSource(url);
+    if(isAdmin&&confirm("Lưu mặc định server?")){
+      saveConfig('default_background',url);alert("Đã lưu server!")
+    }else localStorage.setItem('custom_bg',url)
+  };
+  
   const handleResetBg=()=>{localStorage.removeItem('custom_bg');applyBackgroundSource(serverBg);alert("Đã reset BG")};
-  const handleForceSync=async()=>{if(!isAdmin)return;if(confirm("Cập nhật cấu hình lên Server và ép Client tải lại?")){try{const p={text_color_light:lightTextColor,text_color_dark:darkTextColor,overlay_opacity:overlayOpacity,dark_mode_default:darkMode?'1':'0'};if(bgEmbed||bgVideo||bgImage)p.default_background=bgEmbed||bgVideo||bgImage;const r=await fetch('/api/config/force',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});const d=await r.json();if(d.success){if(d.version)localStorage.setItem('config_version',d.version);let serverList=shortcuts.filter(s=>!s.isLocal);if(clientOrder.length){const idxMap=new Map(clientOrder.map((id,i)=>[id,i]));serverList=[...serverList].sort((a,b)=>{const ia=idxMap.has(a.id)?idxMap.get(a.id):Infinity;const ib=idxMap.has(b.id)?idxMap.get(b.id):Infinity;if(ia!==ib)return ia-ib;return (b.favorite-a.favorite)||(sortBy==='alpha'?a.name.localeCompare(b.name):0)})}else{serverList=[...serverList].sort((a,b)=>(b.favorite-a.favorite)||(sortBy==='alpha'?a.name.localeCompare(b.name):0))}const order=serverList.map(s=>s.id);await fetch('/api/reorder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tenant,order})});alert("Đã đồng bộ!");fetchData()}else alert("Lỗi: "+d.error)}catch{alert("Lỗi sync")}}};
+  const handleForceSync=async()=>{
+    if(!isAdmin)return;
+    if(confirm("Cập nhật cấu hình lên Server và ép Client tải lại?")){
+      try{
+        const p={
+          text_color_light:lightTextColor,
+          text_color_dark:darkTextColor,
+          overlay_opacity:overlayOpacity,
+          dark_mode_default:darkMode?'1':'0'
+        };
+        const currentBg = bgEmbed || bgVideo || bgImage;
+        if(currentBg) p.default_background = currentBg;
+        
+        const r=await fetch('/api/config/force',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});
+        const d=await r.json();
+        if(d.success){
+          if(d.version)localStorage.setItem('config_version',d.version);
+          let serverList=shortcuts.filter(s=>!s.isLocal);
+          if(clientOrder.length){
+            const idxMap=new Map(clientOrder.map((id,i)=>[id,i]));
+            serverList=[...serverList].sort((a,b)=>{
+              const ia=idxMap.has(a.id)?idxMap.get(a.id):Infinity;
+              const ib=idxMap.has(b.id)?idxMap.get(b.id):Infinity;
+              if(ia!==ib)return ia-ib;
+              return (b.favorite-a.favorite)||(sortBy==='alpha'?a.name.localeCompare(b.name):0)
+            });
+          }else{
+            serverList=[...serverList].sort((a,b)=>(b.favorite-a.favorite)||(sortBy==='alpha'?a.name.localeCompare(b.name):0));
+          }
+          const order=serverList.map(s=>s.id);
+          await fetch('/api/reorder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tenant,order})});
+          alert("Đã đồng bộ!");
+          fetchData()
+        }else alert("Lỗi: "+d.error);
+      }catch{
+        alert("Lỗi sync")
+      }
+    }
+  };
 
   const resetForm=()=>setFormData({id:null,name:'',url:'',icon_url:'',parent_label:'',parent_color:COLOR_PRESETS[0],child_label:'',child_color:COLOR_PRESETS[1],isLocal:false});
   const handleSubmit=async e=>{e.preventDefault();if(!formData.name.trim()||!formData.url.trim())return alert('Thiếu tên/URL');let iconToSave=formData.icon_url;if(!iconToSave){try{const urlObj=new URL(formData.url);iconToSave=`https://www.google.com/s2/favicons?domain=${urlObj.hostname}&sz=128`}catch(e){}}const payload={...formData,icon_url:iconToSave};const isLocal=!isAdmin||formData.isLocal;if(isLocal){const l=JSON.parse(localStorage.getItem('local_shortcuts')||'[]');let nl;if(formData.id&&formData.isLocal)nl=l.map(s=>s.id===formData.id?{...payload,id:formData.id}:s);else nl=[{...payload,id:Date.now(),clicks:0,favorite:0},...l];localStorage.setItem('local_shortcuts',JSON.stringify(nl));fetchData();setShowAddModal(false);resetForm()}else{try{const r=await fetch(formData.id?`/api/shortcuts/${formData.id}`:'/api/shortcuts',{method:formData.id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});if(r.ok){await fetchData();setShowAddModal(false);resetForm()}}catch{alert('Lỗi Server')}}};
@@ -45,10 +101,6 @@ export default function App(){
   const handleDragOver=e=>{e.preventDefault();e.dataTransfer.dropEffect='move'};
   const handleDrop=(e,targetId)=>{e.preventDefault();if(!draggingId||draggingId===targetId)return;setClientOrder(prev=>{const baseIds=filteredShortcuts.map(s=>s.id);let current=prev&&prev.length?prev.filter(id=>baseIds.includes(id)):baseIds.slice();baseIds.forEach(id=>{if(!current.includes(id))current.push(id)});const from=current.indexOf(draggingId);const to=current.indexOf(targetId);if(from===-1||to===-1)return prev;const next=current.slice();next.splice(from,1);next.splice(to,0,draggingId);localStorage.setItem('shortcut_order_'+tenant,JSON.stringify(next));return next});setDraggingId(null)};
   const handleDragEnd=()=>{setDraggingId(null)};
-
-  const fetchInsights=async()=>{try{const r=await fetch('/api/insights');setInsightsData(await r.json());setShowInsightsModal(true)}catch{alert("Lỗi insights")}};
-  const handleExportStats=()=>{window.open('/api/insights/export','_blank')};
-  const handleExportSummary=()=>{window.open('/api/insights/export/summary','_blank')};
 
   const uniqueParents=useMemo(()=>[...new Set(shortcuts.map(s=>s.parent_label).filter(Boolean))].sort(),[shortcuts]);
   const uniqueChildren=useMemo(()=>[...new Set(shortcuts.flatMap(s=>(s.child_label||'').split(',').map(t=>t.trim()).filter(Boolean)))].sort(),[shortcuts]);
@@ -106,12 +158,16 @@ export default function App(){
           </div>
           {totalPages>1&&(<div className="flex justify-center mt-6 mb-4 gap-2">{Array.from({length:totalPages}).map((_,i)=><button key={i} onClick={()=>setCurrentPage(i)} className={`w-2.5 h-2.5 rounded-full transition-all duration-200 border ${i===currentPage?(darkMode?'bg-white border-white scale-110':'bg-gray-800 border-gray-800 scale-110'):(darkMode?'border-white/40 bg-white/10':'border-gray-400/40 bg-gray-500/10')}`}/>)}</div>)}
         </div>
+
         <div className="fixed bottom-6 right-6 z-50 pointer-events-auto opacity-0 hover:opacity-100 transition-opacity duration-300">
           <div className="group/menu flex items-center justify-end gap-2 p-2 rounded-full hover:bg-white/20 hover:backdrop-blur-md transition-all">
             <div className="flex items-center gap-2">{(bgImage||bgVideo||bgEmbed)&&<div className="flex items-center gap-1 mr-2 bg-black/40 rounded-full px-2 py-1 backdrop-blur-sm"><span className="text-[10px] text-white/90 font-bold">BG</span><input type="range" min="0" max="0.9" step="0.1" value={overlayOpacity} onChange={e=>{const v=parseFloat(e.target.value);setOverlayOpacity(v);localStorage.setItem('overlayOpacity',v);if(isAdmin)saveConfig('overlay_opacity',v)}} className="w-16 h-1 accent-[#009FB8] cursor-pointer"/></div>}
             <button onClick={()=>setDarkMode(!darkMode)} className={`p-2 rounded-full border shadow-sm ${inputClass} ${(bgImage||bgVideo||bgEmbed)?'bg-opacity-80':''}`}>{darkMode?<Sun size={18} className="text-yellow-400"/>:<Moon size={18} className="text-gray-600"/>}</button>
             <div className={`flex items-center gap-1 p-1 rounded-full border shadow-lg ${inputClass} bg-opacity-80 backdrop-blur`}>
-              <div className="flex flex-col gap-0.5 mr-1 border-r border-gray-400/30 pr-1"><div className="flex items-center gap-1" title="Text Light"><input type="color" value={lightTextColor} onChange={e=>handleTextColorChange('light',e.target.value)} className="w-4 h-4 p-0 border-none bg-transparent cursor-pointer"/></div><div className="flex items-center gap-1" title="Text Dark"><input type="color" value={darkTextColor} onChange={e=>handleTextColorChange('dark',e.target.value)} className="w-4 h-4 p-0 border-none bg-transparent cursor-pointer"/></div></div>
+              <div className="flex flex-col gap-0.5 mr-1 border-r border-gray-400/30 pr-1">
+                <div className="flex items-center gap-1" title="Text Light"><input type="color" value={lightTextColor} onChange={e=>handleTextColorChange('light',e.target.value)} className="w-4 h-4 p-0 border-none bg-transparent cursor-pointer"/></div>
+                <div className="flex items-center gap-1" title="Text Dark"><input type="color" value={darkTextColor} onChange={e=>handleTextColorChange('dark',e.target.value)} className="w-4 h-4 p-0 border-none bg-transparent cursor-pointer"/></div>
+              </div>
               <button onClick={()=>bgInputRef.current?.click()} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"><ImageIcon size={16}/></button><input type="file" ref={bgInputRef} className="hidden" accept="image/*" onChange={handleBgUpload}/>
               <div className="hidden sm:flex items-center gap-1 ml-1"><input type="text" placeholder="Link ảnh/GIF/MP4" className={`px-2 py-1 text-[11px] rounded-full border max-w-[160px] ${inputClass}`} value={bgUrlInput} onChange={e=>setBgUrlInput(e.target.value)}/><button type="button" onClick={applyBgUrl} className="px-2 py-1 text-[11px] rounded-full border border-gray-400/50 hover:bg-gray-200 dark:hover:bg-gray-700">Set</button></div>
               {isAdmin&&(<>
@@ -134,56 +190,28 @@ export default function App(){
         {showInsightsModal&&insightsData&&(
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
             <div className={`rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6 ${modalClass}`}>
-              <div className="flex justify-between items-center mb-6">
-                <div className="flex items-center gap-4">
-                  <h3 className="font-bold text-xl flex items-center gap-2"><ChartIcon className="text-orange-500"/> Phân tích</h3>
-                  <div className="flex flex-wrap gap-2">
-                    <button onClick={handleExportStats} className="text-xs flex items-center gap-1 text-blue-500 hover:underline bg-blue-500/10 px-2 py-1 rounded"><Download size={12}/> Xuất CSV đầy đủ</button>
-                    <button onClick={handleExportSummary} className="text-xs flex items-center gap-1 text-emerald-500 hover:underline bg-emerald-500/10 px-2 py-1 rounded"><Download size={12}/> CSV tổng hợp</button>
-                  </div>
-                </div>
-                <button onClick={()=>setShowInsightsModal(false)}><X size={24}/></button>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20">
-                  <p className="text-sm opacity-70">Tổng Click</p>
-                  <p className="text-3xl font-bold text-blue-500">{insightsData.totalClicks}</p>
-                </div>
-                <div className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/20">
-                  <p className="text-sm opacity-70">Top 1 App</p>
-                  <p className="text-xl font-bold text-purple-500 truncate">{insightsData.topApps[0]?.name||'N/A'}</p>
-                </div>
-              </div>
+              <div className="flex justify-between items-center mb-6"><div className="flex items-center gap-4"><h3 className="font-bold text-xl flex items-center gap-2"><ChartIcon className="text-orange-500"/> Phân tích</h3><button onClick={handleExportStats} className="text-xs flex items-center gap-1 text-blue-500 hover:underline bg-blue-500/10 px-2 py-1 rounded"><Download size={12}/> Xuất CSV đầy đủ</button></div><button onClick={()=>setShowInsightsModal(false)}><X size={24}/></button></div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6"><div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20"><p className="text-sm opacity-70">Tổng Click</p><p className="text-3xl font-bold text-blue-500">{insightsData.totalClicks}</p></div><div className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/20"><p className="text-sm opacity-70">Top 1 App</p><p className="text-xl font-bold text-purple-500 truncate">{insightsData.topApps[0]?.name||'N/A'}</p></div></div>
               <div className="space-y-6">
-                <div className="p-4 rounded-xl border border-gray-500/20">
-                  <h4 className="text-sm font-bold mb-4 opacity-80">Top 10 Ứng Dụng</h4>
-                  <div className="flex flex-col gap-2">
-                    {insightsData.topApps.map((a,i)=>(
-                      <div key={i} className="flex items-center gap-2">
-                        <div className="w-24 truncate text-xs opacity-80">{a.name}</div>
-                        <div className="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                          <div className="h-full rounded-full" style={{width:`${(a.count/Math.max(...insightsData.topApps.map(x=>x.count),1))*100}%`,background:'#009FB8'}}/>
-                        </div>
-                        <div className="text-xs font-bold w-8 text-right">{a.count}</div>
+                <div className="p-4 rounded-xl border border-gray-500/20"><h4 className="text-sm font-bold mb-4 opacity-80">Top 10 Ứng Dụng</h4>
+                  <div className="flex flex-col gap-2">{insightsData.topApps.map((a,i)=>(
+                    <div key={i} className="flex items-center gap-2">
+                      <div className="w-24 truncate text-xs opacity-80">{a.name}</div>
+                      <div className="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                        <div className="h-full rounded-full" style={{width:`${(a.count/Math.max(...insightsData.topApps.map(x=>x.count),1))*100}%`,background:'#009FB8'}}/>
                       </div>
-                    ))}
-                  </div>
+                      <div className="text-xs font-bold w-8 text-right">{a.count}</div>
+                    </div>
+                  ))}</div>
                 </div>
-                <div className="p-4 rounded-xl border border-gray-500/20">
-                  <h4 className="text-sm font-bold mb-4 opacity-80">Hoạt động (7 ngày qua)</h4>
-                  <div className="flex items-end gap-1 h-32">
-                    {insightsData.timeline.map((d,i)=>(
-                      <div key={i} className="flex-1 flex flex-col items-center gap-1 group">
-                        <div className="w-full bg-emerald-400/60 rounded-t hover:bg-emerald-500 transition-all" style={{height:`${Math.max((d.count/Math.max(...insightsData.timeline.map(x=>x.count),1))*100, 5)}%`}} title={`${d.d}: ${d.count} clicks`}></div>
-                        <div className="text-[9px] opacity-60 -rotate-45 mt-2">{d.d.slice(5)}</div>
-                      </div>
-                    ))}
-                  </div>
+                <div className="p-4 rounded-xl border border-gray-500/20"><h4 className="text-sm font-bold mb-4 opacity-80">Hoạt động (7 ngày qua)</h4>
+                   <div className="flex items-end gap-1 h-32">{insightsData.timeline.map((d,i)=>(<div key={i} className="flex-1 flex flex-col items-center gap-1 group"><div className="w-full bg-emerald-400/60 rounded-t hover:bg-emerald-500 transition-all" style={{height:`${Math.max((d.count/Math.max(...insightsData.timeline.map(x=>x.count),1))*100, 5)}%`}} title={`${d.d}: ${d.count} clicks`}></div><div className="text-[9px] opacity-60 -rotate-45 mt-2">{d.d.slice(5)}</div></div>))}</div>
                 </div>
               </div>
             </div>
           </div>
         )}
+
         {showLoginModal&&(
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"><div className={`rounded-2xl shadow-2xl w-full max-w-xs p-6 border ${modalClass}`}><div className="flex justify-between items-center mb-6"><h3 className="font-bold">Admin</h3><button onClick={()=>setShowLoginModal(false)}><X size={20}/></button></div><form onSubmit={handleLogin} className="space-y-4"><input type="text" placeholder="User" className={`w-full px-4 py-2 rounded-lg text-sm border ${inputClass}`} value={loginCreds.username} onChange={e=>setLoginCreds({...loginCreds,username:e.target.value})}/><input type="password" placeholder="Pass" className={`w-full px-4 py-2 rounded-lg text-sm border ${inputClass}`} value={loginCreds.password} onChange={e=>setLoginCreds({...loginCreds,password:e.target.value})}/>{loginError&&<p className="text-red-500 text-xs">{loginError}</p>}<button className="w-full py-2 bg-[#0F2F55] text-white rounded-lg hover:bg-opacity-90">Login</button></form></div></div>
         )}
