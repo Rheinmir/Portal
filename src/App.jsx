@@ -1,8 +1,5 @@
-import React,{useState,useEffect,useRef,useMemo}from'react';import{Save,Trash2,Plus,Search,Activity,Copy,Check,Settings,LogOut,X,Filter,Tag,Upload,Download,FileUp,Pencil,Star,Moon,Sun,LayoutGrid,List,Image as ImageIcon,RotateCcw,BarChart as ChartIcon,Palette,RefreshCw}from'lucide-react';
-import{BarChart,Bar,XAxis,YAxis,Tooltip,ResponsiveContainer,PieChart,Pie,Cell}from'recharts';
-
+import React,{useState,useEffect,useRef,useMemo}from'react';import{Save,Trash2,Plus,Search,Activity,Copy,Check,Settings,LogOut,X,Filter,Tag,Upload,Download,FileUp,Pencil,Star,Moon,Sun,LayoutGrid,List,Image as ImageIcon,RotateCcw,BarChart as ChartIcon,Palette,Type,RefreshCw}from'lucide-react';
 const COLOR_PRESETS=['#0A1A2F','#009FB8','#6D28D9','#BE123C','#059669','#C2410C','#475569'];const DEFAULT_LIGHT_TEXT='#2C2C2C',DEFAULT_DARK_TEXT='#E2E8F0';
-const CHART_COLORS=['#0088FE','#00C49F','#FFBB28','#FF8042','#8884d8','#82ca9d'];
 const getGradientStyle=h=>h?{background:`linear-gradient(135deg,${h},${h}dd)`}:{};
 const getContrastYIQ=(hex)=>{if(!hex)return'#fff';const h=hex.replace('#','');const r=parseInt(h.substr(0,2),16),g=parseInt(h.substr(2,2),16),b=parseInt(h.substr(4,2),16);return(((r*299)+(g*587)+(b*114))/1000)>=128?'#000':'#fff'};
 const normalizeTenant=t=>(t&&typeof t==='string'?t.trim():'')||'default';
@@ -27,6 +24,7 @@ export default function App(){
   const [clientOrder,setClientOrder]=useState(()=>{const r=localStorage.getItem('shortcut_order_'+tenant);return r?JSON.parse(r):[]}),[draggingId,setDraggingId]=useState(null);
   const fileInputRef=useRef(null),bgInputRef=useRef(null),importInputRef=useRef(null),gridWrapperRef=useRef(null),gridRef=useRef(null);
 
+  // PREVENT SCROLL
   useEffect(()=>{
     const html=document.documentElement; const body=document.body;
     const p1=html.style.overflow; const p2=body.style.overflow;
@@ -110,7 +108,6 @@ export default function App(){
 
   const fetchInsights=async()=>{try{const r=await fetch('/api/insights');setInsightsData(await r.json());setShowInsightsModal(true)}catch{alert("Lỗi insights")}};
   const handleExportStats=()=>{window.open('/api/insights/export','_blank')};
-  const handleExportSummary=()=>{window.open('/api/insights/export/summary','_blank')};
 
   const resetForm=()=>setFormData({id:null,name:'',url:'',icon_url:'',parent_label:'',parent_color:COLOR_PRESETS[0],child_label:'',child_color:COLOR_PRESETS[1],isLocal:false});
   const handleSubmit=async e=>{e.preventDefault();if(!formData.name.trim()||!formData.url.trim())return alert('Thiếu tên/URL');let iconToSave=formData.icon_url;if(!iconToSave){try{const urlObj=new URL(formData.url);iconToSave=`https://www.google.com/s2/favicons?domain=${urlObj.hostname}&sz=128`}catch(e){}}const payload={...formData,icon_url:iconToSave};const isLocal=!isAdmin||formData.isLocal;if(isLocal){const l=JSON.parse(localStorage.getItem('local_shortcuts')||'[]');let nl;if(formData.id&&formData.isLocal)nl=l.map(s=>s.id===formData.id?{...payload,id:formData.id}:s);else nl=[{...payload,id:Date.now(),clicks:0,favorite:0},...l];localStorage.setItem('local_shortcuts',JSON.stringify(nl));fetchData();setShowAddModal(false);resetForm()}else{try{const r=await fetch(formData.id?`/api/shortcuts/${formData.id}`:'/api/shortcuts',{method:formData.id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});if(r.ok){await fetchData();setShowAddModal(false);resetForm()}}catch{alert('Lỗi Server')}}};
@@ -145,6 +142,9 @@ export default function App(){
   const isLastPage=currentPage===totalPages-1;
   if(loading)return<div className={`min-h-screen flex items-center justify-center ${bgClass}`}><Activity className="w-8 h-8 animate-spin text-blue-500"/></div>;
 
+  // COLORS
+  const chartColors=['#009FB8','#6D28D9','#BE123C','#059669','#C2410C','#475569','#F59E0B','#10B981','#3B82F6','#EC4899'];
+
   return (
     <div className={`min-h-screen font-light transition-all duration-300 bg-cover bg-center bg-no-repeat bg-fixed ${bgClass}`} style={{backgroundImage:bgImage?`url(${bgImage})`:'none',color:currentTextColor}}>
       {bgVideo&&<video className="fixed inset-0 w-full h-full object-cover -z-10" src={bgVideo} autoPlay loop muted playsInline/>}
@@ -170,8 +170,9 @@ export default function App(){
             {pagedShortcuts.map(i=>(<div key={i.id} data-card draggable onDragStart={e=>handleDragStart(e,i.id)} onDragOver={handleDragOver} onDrop={e=>handleDrop(e,i.id)} onDragEnd={handleDragEnd} className={`group relative flex flex-col items-center w-full max-w-[100px] cursor-pointer active:scale-95 transition-transform ${draggingId===i.id?'opacity-50 scale-90':''}`} onClick={()=>handleLinkClick(i.id,i.url)}>
               <div className="absolute -top-2 -right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10 scale-90"><button onClick={e=>{e.stopPropagation();setCopiedId(i.id);navigator.clipboard.writeText(i.url);setTimeout(()=>setCopiedId(null),1000)}} className={`p-1.5 rounded-full shadow-sm border ${cardClass} bg-opacity-90`}>{copiedId===i.id?<Check size={12} className="text-green-500"/>:<Copy size={12}/>}</button>{(isAdmin||i.isLocal)&&(<><button onClick={e=>handleEdit(i,e)} className={`p-1.5 rounded-full shadow-sm border ml-1 ${cardClass}`}><Pencil size={12}/></button><button onClick={e=>{e.stopPropagation();handleDelete(i.id)}} className={`p-1.5 rounded-full shadow-sm border ml-1 ${cardClass}`}><Trash2 size={12}/></button></>)}</div>
               <button onClick={e=>handleToggleFavorite(i.id,e)} className={`absolute -top-1 -left-1 z-10 p-1 rounded-full transition-transform hover:scale-110 ${i.favorite?'text-yellow-400':'text-gray-300 opacity-0 group-hover:opacity-100'}`}><Star size={14} fill={i.favorite?"currentColor":"none"}/></button>
+              {/* NEW ICON LOGIC */}
               <div className="w-16 h-16 mb-2 rounded-2xl overflow-hidden flex items-center justify-center" style={{background:"transparent",boxShadow:"none"}}>
-                {i.icon_url?(<img src={i.icon_url} className="w-full h-full object-contain" style={{borderRadius:0,boxShadow:"none",background:"transparent"}}/>):(<div className="w-14 h-14 rounded-xl flex items-center justify-center text-white text-xl font-semibold shadow-sm" style={{background:labelColors[i.parent_label]||"#4A5568",boxShadow:"none"}}>{i.name?.charAt(0).toUpperCase()}</div>)}
+                {i.icon_url?(<img src={i.icon_url} className="w-full h-full object-contain" style={{borderRadius:0,boxShadow:"none",background:"transparent"}}/>):(<span className="text-xl font-semibold">{i.name?.charAt(0).toUpperCase()}</span>)}
               </div>
               <span className="text-xs text-center truncate w-full px-1 leading-tight font-light" style={{textShadow:(bgImage||bgVideo||bgEmbed)?'0 1px 2px rgba(0,0,0,0.5)':'none'}}>{i.name}</span>
               <div className="flex flex-wrap justify-center gap-1 mt-1 px-1">
@@ -213,12 +214,14 @@ export default function App(){
                 <button onClick={()=>setShowLoginModal(true)} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"><Settings size={18}/></button>
               </>)}
             </div></div>
+            <div className="w-10 h-10 flex items-center justify-center bg-white/20 backdrop-blur-md rounded-full border border-white/30 text-white shadow-lg cursor-pointer group-hover/menu:hidden absolute bottom-0 right-0 pointer-events-none"><Settings size={20} className="animate-spin-slow"/></div>
           </div>
         </div>
+
         {showInsightsModal&&insightsData&&(
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
             <div className={`rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6 ${modalClass}`}>
-              <div className="flex justify-between items-center mb-6"><div className="flex items-center gap-4"><h3 className="font-bold text-xl flex items-center gap-2"><ChartIcon className="text-orange-500"/> Phân tích</h3><button onClick={handleExportStats} className="text-xs flex items-center gap-1 text-blue-500 hover:underline bg-blue-500/10 px-2 py-1 rounded"><Download size={12}/> Xuất CSV đầy đủ</button><button onClick={handleExportSummary} className="text-xs flex items-center gap-1 text-emerald-500 hover:underline bg-emerald-500/10 px-2 py-1 rounded"><Download size={12}/> CSV tóm tắt</button></div><button onClick={()=>setShowInsightsModal(false)}><X size={24}/></button></div>
+              <div className="flex justify-between items-center mb-6"><div className="flex items-center gap-4"><h3 className="font-bold text-xl flex items-center gap-2"><ChartIcon className="text-orange-500"/> Phân tích</h3><button onClick={handleExportStats} className="text-xs flex items-center gap-1 text-blue-500 hover:underline bg-blue-500/10 px-2 py-1 rounded"><Download size={12}/> Xuất CSV đầy đủ</button></div><button onClick={()=>setShowInsightsModal(false)}><X size={24}/></button></div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6"><div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20"><p className="text-sm opacity-70">Tổng Click</p><p className="text-3xl font-bold text-blue-500">{insightsData.totalClicks}</p></div><div className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/20"><p className="text-sm opacity-70">Top 1 App</p><p className="text-xl font-bold text-purple-500 truncate">{insightsData.topApps[0]?.name||'N/A'}</p></div></div>
               <div className="space-y-6">
                 <div className="p-4 rounded-xl border border-gray-500/20"><h4 className="text-sm font-bold mb-4 opacity-80">Top 10 Ứng Dụng</h4>
