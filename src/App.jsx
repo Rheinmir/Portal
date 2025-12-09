@@ -1,4 +1,4 @@
-import React,{useState,useEffect,useRef,useMemo}from'react';import{Save,Trash2,Plus,Search,Activity,Copy,Check,Settings,LogOut,X,Filter,Tag,Upload,Download,FileUp,Pencil,Star,Moon,Sun,LayoutGrid,List,Image as ImageIcon,RotateCcw,BarChart as ChartIcon,Palette,RefreshCw}from'lucide-react';
+import React,{useState,useEffect,useRef,useMemo}from'react';import{Save,Trash2,Plus,Search,Activity,Copy,Check,Settings,LogOut,X,Filter,Tag,Upload,Download,FileUp,Pencil,Star,Moon,Sun,LayoutGrid,List,Image as ImageIcon,RotateCcw,BarChart as ChartIcon,Palette,Type,RefreshCw}from'lucide-react';
 import{BarChart,Bar,XAxis,YAxis,Tooltip,ResponsiveContainer,PieChart,Pie,Cell}from'recharts';
 
 const COLOR_PRESETS=['#0A1A2F','#009FB8','#6D28D9','#BE123C','#059669','#C2410C','#475569'];const DEFAULT_LIGHT_TEXT='#2C2C2C',DEFAULT_DARK_TEXT='#E2E8F0';
@@ -122,7 +122,8 @@ export default function App(){
   const handleImageUpload=e=>{const f=e.target.files[0];if(f){const r=new FileReader();r.onload=ev=>setFormData(p=>({...p,icon_url:ev.target.result}));r.readAsDataURL(f)}};
   const handleExportData=()=>{const d='data:text/json;charset=utf-8,'+encodeURIComponent(JSON.stringify({version:2,timestamp:new Date().toISOString(),shortcuts:shortcuts.filter(s=>!s.isLocal),labels:labelColors}));const a=document.createElement('a');a.href=d;a.download='backup.json';document.body.appendChild(a);a.click();a.remove()};
   const handleImportData=e=>{const f=e.target.files[0];if(f){const r=new FileReader();r.onload=async ev=>{await fetch('/api/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(JSON.parse(ev.target.result))});alert("Import OK!");fetchData()};r.readAsText(f)}};
-  const handleDragStart=(e,id)=>{setDraggingId(id);e.dataTransfer.effectAllowed='move';const iconEl=e.currentTarget.querySelector('[data-icon]');if(iconEl&&e.dataTransfer.setDragImage){const rect=iconEl.getBoundingClientRect();const clone=iconEl.cloneNode(true);clone.style.position='fixed';clone.style.top='-1000px';clone.style.left='-1000px';clone.style.margin='0';clone.style.boxShadow='none';document.body.appendChild(clone);e.dataTransfer.setDragImage(clone,rect.width/2,rect.height/2);setTimeout(()=>{document.body.removeChild(clone)},0)}};
+  
+  const handleDragStart=(e,id)=>{setDraggingId(id);e.dataTransfer.effectAllowed='move';const iconEl=e.currentTarget.querySelector('[data-icon]');if(iconEl&&e.dataTransfer.setDragImage){const rect=iconEl.getBoundingClientRect();const clone=iconEl.cloneNode(true);clone.style.width=rect.width+'px';clone.style.height=rect.height+'px';clone.style.borderRadius='16px';clone.style.overflow='hidden';clone.style.position='absolute';clone.style.top='-1000px';clone.style.left='-1000px';clone.style.zIndex='9999';document.body.appendChild(clone);e.dataTransfer.setDragImage(clone,rect.width/2,rect.height/2);setTimeout(()=>{document.body.removeChild(clone)},0)}};
   const handleDragOver=e=>{e.preventDefault();e.dataTransfer.dropEffect='move'};
   const handleDrop=(e,targetId)=>{e.preventDefault();if(!draggingId||draggingId===targetId)return;setClientOrder(prev=>{const baseIds=filteredShortcuts.map(s=>s.id);let current=prev&&prev.length?prev.filter(id=>baseIds.includes(id)):baseIds.slice();baseIds.forEach(id=>{if(!current.includes(id))current.push(id)});const from=current.indexOf(draggingId);const to=current.indexOf(targetId);if(from===-1||to===-1)return prev;const next=current.slice();next.splice(from,1);next.splice(to,0,draggingId);localStorage.setItem('shortcut_order_'+tenant,JSON.stringify(next));return next});setDraggingId(null)};
   const handleDragEnd=()=>{setDraggingId(null)};
@@ -134,7 +135,7 @@ export default function App(){
   useEffect(()=>{
     const calcItemsPerPage=()=>{if(!gridWrapperRef.current||!gridRef.current)return;const style=getComputedStyle(gridRef.current);const colCount=style.gridTemplateColumns.split(' ').length||1;const cardEl=gridRef.current.querySelector('[data-card]');const cardHeight=cardEl?cardEl.getBoundingClientRect().height:140;const wrapperRect=gridWrapperRef.current.getBoundingClientRect();const availableHeight=window.innerHeight-wrapperRect.top-80;const rows=Math.max(1,Math.floor(availableHeight/cardHeight));setItemsPerPage(Math.max(colCount*rows,colCount))};
     calcItemsPerPage();window.addEventListener('resize',calcItemsPerPage);return()=>window.removeEventListener('resize',calcItemsPerPage)
-  },[filteredShortcuts.length,darkMode,bgImage,bgVideo]);
+  },[filteredShortcuts.length,darkMode,bgImage,bgVideo,bgEmbed]);
   const totalPages=Math.max(1,Math.ceil(filteredShortcuts.length/Math.max(1,itemsPerPage)));
   useEffect(()=>{if(currentPage>=totalPages)setCurrentPage(totalPages-1)},[totalPages,currentPage]);
   const pagedShortcuts=useMemo(()=>filteredShortcuts.slice(currentPage*itemsPerPage,(currentPage+1)*itemsPerPage),[filteredShortcuts,currentPage,itemsPerPage]);
@@ -144,9 +145,6 @@ export default function App(){
   const inputClass=darkMode?'bg-gray-800 border-gray-700':'bg-white border-[#D8D8D8]',modalClass=darkMode?'bg-gray-900 border-gray-700':'bg-white border-[#D8D8D8]';
   const isLastPage=currentPage===totalPages-1;
   if(loading)return<div className={`min-h-screen flex items-center justify-center ${bgClass}`}><Activity className="w-8 h-8 animate-spin text-blue-500"/></div>;
-
-  // COLORS
-  const chartColors=['#009FB8','#6D28D9','#BE123C','#059669','#C2410C','#475569','#F59E0B','#10B981','#3B82F6','#EC4899'];
 
   return (
     <div className={`min-h-screen font-light transition-all duration-300 bg-cover bg-center bg-no-repeat bg-fixed ${bgClass}`} style={{backgroundImage:bgImage?`url(${bgImage})`:'none',color:currentTextColor}}>
@@ -173,8 +171,9 @@ export default function App(){
             {pagedShortcuts.map(i=>(<div key={i.id} data-card draggable onDragStart={e=>handleDragStart(e,i.id)} onDragOver={handleDragOver} onDrop={e=>handleDrop(e,i.id)} onDragEnd={handleDragEnd} className={`group relative flex flex-col items-center w-full max-w-[100px] cursor-pointer active:scale-95 transition-transform ${draggingId===i.id?'opacity-50 scale-90':''}`} onClick={()=>handleLinkClick(i.id,i.url)}>
               <div className="absolute -top-2 -right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10 scale-90"><button onClick={e=>{e.stopPropagation();setCopiedId(i.id);navigator.clipboard.writeText(i.url);setTimeout(()=>setCopiedId(null),1000)}} className={`p-1.5 rounded-full shadow-sm border ${cardClass} bg-opacity-90`}>{copiedId===i.id?<Check size={12} className="text-green-500"/>:<Copy size={12}/>}</button>{(isAdmin||i.isLocal)&&(<><button onClick={e=>handleEdit(i,e)} className={`p-1.5 rounded-full shadow-sm border ml-1 ${cardClass}`}><Pencil size={12}/></button><button onClick={e=>{e.stopPropagation();handleDelete(i.id)}} className={`p-1.5 rounded-full shadow-sm border ml-1 ${cardClass}`}><Trash2 size={12}/></button></>)}</div>
               <button onClick={e=>handleToggleFavorite(i.id,e)} className={`absolute -top-1 -left-1 z-10 p-1 rounded-full transition-transform hover:scale-110 ${i.favorite?'text-yellow-400':'text-gray-300 opacity-0 group-hover:opacity-100'}`}><Star size={14} fill={i.favorite?"currentColor":"none"}/></button>
-              <div className="w-16 h-16 mb-2 rounded-2xl overflow-hidden flex items-center justify-center" style={{background:"transparent",boxShadow:"none"}}>
-                {i.icon_url?(<img src={i.icon_url} className="w-full h-full object-contain" style={{borderRadius:0,boxShadow:"none",background:"transparent"}}/>):(<div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-2 text-white text-xl font-semibold" style={{background:labelColors[i.parent_label]||"#4A5568",boxShadow:"none"}}>{i.name?.charAt(0).toUpperCase()}</div>)}
+              {/* NEW ICON LOGIC */}
+              <div data-icon className="w-16 h-16 mb-2 rounded-2xl overflow-hidden flex items-center justify-center" style={{background:"transparent",boxShadow:"none"}}>
+                {i.icon_url?(<img src={i.icon_url} className="w-full h-full object-contain" style={{borderRadius:0,boxShadow:"none",background:"transparent"}}/>):(<div className="w-full h-full flex items-center justify-center text-white text-xl font-semibold" style={{background:labelColors[i.parent_label]||"#4A5568"}}>{i.name?.charAt(0).toUpperCase()}</div>)}
               </div>
               <span className="text-xs text-center truncate w-full px-1 leading-tight font-light" style={{textShadow:(bgImage||bgVideo||bgEmbed)?'0 1px 2px rgba(0,0,0,0.5)':'none'}}>{i.name}</span>
               <div className="flex flex-wrap justify-center gap-1 mt-1 px-1">
