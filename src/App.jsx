@@ -27,6 +27,13 @@ export default function App(){
   const [clientOrder,setClientOrder]=useState(()=>{const r=localStorage.getItem('shortcut_order_'+tenant);return r?JSON.parse(r):[]}),[draggingId,setDraggingId]=useState(null);
   const fileInputRef=useRef(null),bgInputRef=useRef(null),importInputRef=useRef(null),gridWrapperRef=useRef(null),gridRef=useRef(null);
 
+  useEffect(()=>{
+    const html=document.documentElement; const body=document.body;
+    const p1=html.style.overflow; const p2=body.style.overflow;
+    html.style.overflow='hidden'; body.style.overflow='hidden';
+    return()=>{html.style.overflow=p1;body.style.overflow=p2}
+  },[]);
+
   useEffect(()=>{if(darkMode)document.documentElement.classList.add('dark');else document.documentElement.classList.remove('dark');localStorage.setItem('darkMode',darkMode)},[darkMode]);
   useEffect(()=>{const r=localStorage.getItem('shortcut_order_'+tenant);setClientOrder(r?JSON.parse(r):[])},[tenant]);
   useEffect(()=>{setCurrentPage(0)},[searchTerm,activeParentFilter,activeChildFilter,sortBy,tenant]);
