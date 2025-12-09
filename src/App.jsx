@@ -24,7 +24,6 @@ export default function App(){
   const [clientOrder,setClientOrder]=useState(()=>{const r=localStorage.getItem('shortcut_order_'+tenant);return r?JSON.parse(r):[]}),[draggingId,setDraggingId]=useState(null);
   const fileInputRef=useRef(null),bgInputRef=useRef(null),importInputRef=useRef(null),gridWrapperRef=useRef(null),gridRef=useRef(null);
 
-  // PREVENT SCROLL
   useEffect(()=>{
     const html=document.documentElement; const body=document.body;
     const p1=html.style.overflow; const p2=body.style.overflow;
@@ -142,9 +141,6 @@ export default function App(){
   const isLastPage=currentPage===totalPages-1;
   if(loading)return<div className={`min-h-screen flex items-center justify-center ${bgClass}`}><Activity className="w-8 h-8 animate-spin text-blue-500"/></div>;
 
-  // COLORS
-  const chartColors=['#009FB8','#6D28D9','#BE123C','#059669','#C2410C','#475569','#F59E0B','#10B981','#3B82F6','#EC4899'];
-
   return (
     <div className={`min-h-screen font-light transition-all duration-300 bg-cover bg-center bg-no-repeat bg-fixed ${bgClass}`} style={{backgroundImage:bgImage?`url(${bgImage})`:'none',color:currentTextColor}}>
       {bgVideo&&<video className="fixed inset-0 w-full h-full object-cover -z-10" src={bgVideo} autoPlay loop muted playsInline/>}
@@ -170,9 +166,8 @@ export default function App(){
             {pagedShortcuts.map(i=>(<div key={i.id} data-card draggable onDragStart={e=>handleDragStart(e,i.id)} onDragOver={handleDragOver} onDrop={e=>handleDrop(e,i.id)} onDragEnd={handleDragEnd} className={`group relative flex flex-col items-center w-full max-w-[100px] cursor-pointer active:scale-95 transition-transform ${draggingId===i.id?'opacity-50 scale-90':''}`} onClick={()=>handleLinkClick(i.id,i.url)}>
               <div className="absolute -top-2 -right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10 scale-90"><button onClick={e=>{e.stopPropagation();setCopiedId(i.id);navigator.clipboard.writeText(i.url);setTimeout(()=>setCopiedId(null),1000)}} className={`p-1.5 rounded-full shadow-sm border ${cardClass} bg-opacity-90`}>{copiedId===i.id?<Check size={12} className="text-green-500"/>:<Copy size={12}/>}</button>{(isAdmin||i.isLocal)&&(<><button onClick={e=>handleEdit(i,e)} className={`p-1.5 rounded-full shadow-sm border ml-1 ${cardClass}`}><Pencil size={12}/></button><button onClick={e=>{e.stopPropagation();handleDelete(i.id)}} className={`p-1.5 rounded-full shadow-sm border ml-1 ${cardClass}`}><Trash2 size={12}/></button></>)}</div>
               <button onClick={e=>handleToggleFavorite(i.id,e)} className={`absolute -top-1 -left-1 z-10 p-1 rounded-full transition-transform hover:scale-110 ${i.favorite?'text-yellow-400':'text-gray-300 opacity-0 group-hover:opacity-100'}`}><Star size={14} fill={i.favorite?"currentColor":"none"}/></button>
-              {/* NEW ICON LOGIC */}
               <div className="w-16 h-16 mb-2 rounded-2xl overflow-hidden flex items-center justify-center" style={{background:"transparent",boxShadow:"none"}}>
-                {i.icon_url?(<img src={i.icon_url} className="w-full h-full object-contain" style={{borderRadius:0,boxShadow:"none",background:"transparent"}}/>):(<span className="text-xl font-semibold">{i.name?.charAt(0).toUpperCase()}</span>)}
+                {i.icon_url?(<img src={i.icon_url} className="w-full h-full object-contain" style={{borderRadius:0,boxShadow:"none",background:"transparent"}}/>):(<div className="w-14 h-14 rounded-xl flex items-center justify-center text-white text-xl font-semibold shadow-sm" style={{background:labelColors[i.parent_label]||"#4A5568",boxShadow:"none"}}>{i.name?.charAt(0).toUpperCase()}</div>)}
               </div>
               <span className="text-xs text-center truncate w-full px-1 leading-tight font-light" style={{textShadow:(bgImage||bgVideo||bgEmbed)?'0 1px 2px rgba(0,0,0,0.5)':'none'}}>{i.name}</span>
               <div className="flex flex-wrap justify-center gap-1 mt-1 px-1">
@@ -192,10 +187,7 @@ export default function App(){
             <div className="flex items-center gap-2">{(bgImage||bgVideo||bgEmbed)&&<div className="flex items-center gap-1 mr-2 bg-black/40 rounded-full px-2 py-1 backdrop-blur-sm"><span className="text-[10px] text-white/90 font-bold">BG</span><input type="range" min="0" max="0.9" step="0.1" value={overlayOpacity} onChange={e=>{const v=parseFloat(e.target.value);setOverlayOpacity(v);localStorage.setItem('overlayOpacity',v);if(isAdmin)saveConfig('overlay_opacity',v)}} className="w-16 h-1 accent-[#009FB8] cursor-pointer"/></div>}
             <button onClick={()=>setDarkMode(!darkMode)} className={`p-2 rounded-full border shadow-sm ${inputClass} ${(bgImage||bgVideo||bgEmbed)?'bg-opacity-80':''}`}>{darkMode?<Sun size={18} className="text-yellow-400"/>:<Moon size={18} className="text-gray-600"/>}</button>
             <div className={`flex items-center gap-1 p-1 rounded-full border shadow-lg ${inputClass} bg-opacity-80 backdrop-blur`}>
-              <div className="flex flex-col gap-0.5 mr-1 border-r border-gray-400/30 pr-1">
-                <div className="flex items-center gap-1" title="Text Light"><input type="color" value={lightTextColor} onChange={e=>handleTextColorChange('light',e.target.value)} className="w-4 h-4 p-0 border-none bg-transparent cursor-pointer"/></div>
-                <div className="flex items-center gap-1" title="Text Dark"><input type="color" value={darkTextColor} onChange={e=>handleTextColorChange('dark',e.target.value)} className="w-4 h-4 p-0 border-none bg-transparent cursor-pointer"/></div>
-              </div>
+              <div className="flex flex-col gap-0.5 mr-1 border-r border-gray-400/30 pr-1"><div className="flex items-center gap-1" title="Text Light"><input type="color" value={lightTextColor} onChange={e=>handleTextColorChange('light',e.target.value)} className="w-4 h-4 p-0 border-none bg-transparent cursor-pointer"/></div><div className="flex items-center gap-1" title="Text Dark"><input type="color" value={darkTextColor} onChange={e=>handleTextColorChange('dark',e.target.value)} className="w-4 h-4 p-0 border-none bg-transparent cursor-pointer"/></div></div>
               <button onClick={()=>bgInputRef.current?.click()} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"><ImageIcon size={16}/></button><input type="file" ref={bgInputRef} className="hidden" accept="image/*,video/*" onChange={handleBgUpload}/>
               <div className="hidden sm:flex items-center gap-1 ml-1"><input type="text" placeholder="Link ảnh/GIF (https://...)" className={`px-2 py-1 text-[11px] rounded-full border max-w-[160px] ${inputClass}`} value={bgUrlInput} onChange={e=>setBgUrlInput(e.target.value)}/><button type="button" onClick={applyBgUrl} className="px-2 py-1 text-[11px] rounded-full border border-gray-400/50 hover:bg-gray-200 dark:hover:bg-gray-700">Set</button></div>
               {isAdmin&&(<>
@@ -214,10 +206,8 @@ export default function App(){
                 <button onClick={()=>setShowLoginModal(true)} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"><Settings size={18}/></button>
               </>)}
             </div></div>
-            <div className="w-10 h-10 flex items-center justify-center bg-white/20 backdrop-blur-md rounded-full border border-white/30 text-white shadow-lg cursor-pointer group-hover/menu:hidden absolute bottom-0 right-0 pointer-events-none"><Settings size={20} className="animate-spin-slow"/></div>
           </div>
         </div>
-
         {showInsightsModal&&insightsData&&(
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
             <div className={`rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6 ${modalClass}`}>
@@ -225,13 +215,18 @@ export default function App(){
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6"><div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20"><p className="text-sm opacity-70">Tổng Click</p><p className="text-3xl font-bold text-blue-500">{insightsData.totalClicks}</p></div><div className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/20"><p className="text-sm opacity-70">Top 1 App</p><p className="text-xl font-bold text-purple-500 truncate">{insightsData.topApps[0]?.name||'N/A'}</p></div></div>
               <div className="space-y-6">
                 <div className="p-4 rounded-xl border border-gray-500/20"><h4 className="text-sm font-bold mb-4 opacity-80">Top 10 Ứng Dụng</h4>
-                  <div className="h-56"><ResponsiveContainer width="100%" height="100%"><BarChart data={insightsData.topApps}><XAxis dataKey="name" tick={{fontSize:10}} tickLine={false} axisLine={false} interval={0} angle={-35} textAnchor="end" height={60}/><YAxis tick={{fontSize:10}}/><Tooltip cursor={{fill:'rgba(148,163,184,0.15)'}}/><Bar dataKey="count" radius={[4,4,0,0]}>{insightsData.topApps.map((a,i)=>(<Cell key={`cell-${i}`} fill={chartColors[i%chartColors.length]}/>))}</Bar></BarChart></ResponsiveContainer></div>
+                  <div className="flex flex-col gap-2">{insightsData.topApps.map((a,i)=>(
+                    <div key={i} className="flex items-center gap-2">
+                      <div className="w-24 truncate text-xs opacity-80">{a.name}</div>
+                      <div className="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                        <div className="h-full rounded-full" style={{width:`${(a.count/Math.max(...insightsData.topApps.map(x=>x.count),1))*100}%`,background:'#009FB8'}}/>
+                      </div>
+                      <div className="text-xs font-bold w-8 text-right">{a.count}</div>
+                    </div>
+                  ))}</div>
                 </div>
                 <div className="p-4 rounded-xl border border-gray-500/20"><h4 className="text-sm font-bold mb-4 opacity-80">Hoạt động (7 ngày qua)</h4>
-                   <div className="h-56"><ResponsiveContainer width="100%" height="100%"><BarChart data={insightsData.timeline}><XAxis dataKey="d" tick={{fontSize:10}} tickLine={false} axisLine={false} interval={0}/><YAxis tick={{fontSize:10}}/><Tooltip cursor={{fill:'rgba(148,163,184,0.15)'}}/><Bar dataKey="count" fill="#10B981" radius={[4,4,0,0]}/></BarChart></ResponsiveContainer></div>
-                </div>
-                <div className="p-4 rounded-xl border border-gray-500/20"><h4 className="text-sm font-bold mb-4 opacity-80">Theo giờ</h4>
-                   <div className="h-56"><ResponsiveContainer width="100%" height="100%"><BarChart data={insightsData.hourly.map(h=>({hour:`${h.h}h`,count:h.count}))}><XAxis dataKey="hour" tick={{fontSize:10}} tickLine={false} axisLine={false} interval={0}/><YAxis tick={{fontSize:10}}/><Tooltip cursor={{fill:'rgba(148,163,184,0.15)'}}/><Bar dataKey="count" fill="#8884d8" radius={[4,4,0,0]}/></BarChart></ResponsiveContainer></div>
+                   <div className="flex items-end gap-1 h-32">{insightsData.timeline.map((d,i)=>(<div key={i} className="flex-1 flex flex-col items-center gap-1 group"><div className="w-full bg-emerald-400/60 rounded-t hover:bg-emerald-500 transition-all" style={{height:`${Math.max((d.count/Math.max(...insightsData.timeline.map(x=>x.count),1))*100, 5)}%`}} title={`${d.d}: ${d.count} clicks`}></div><div className="text-[9px] opacity-60 -rotate-45 mt-2">{d.d.slice(5)}</div></div>))}</div>
                 </div>
               </div>
             </div>
