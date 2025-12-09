@@ -21,7 +21,7 @@ export default function App(){
   const[shortcuts,setShortcuts]=useState([]),[labelColors,setLabelColors]=useState({}),[loading,setLoading]=useState(true),[darkMode,setDarkMode]=useState(()=>localStorage.getItem('darkMode')==='true'),[bgImage,setBgImage]=useState(null),[serverBg,setServerBg]=useState(null),[bgVideo,setBgVideo]=useState(null),[bgEmbed,setBgEmbed]=useState(null),[overlayOpacity,setOverlayOpacity]=useState(()=>{const r=localStorage.getItem('overlayOpacity');const n=parseFloat(r);return isNaN(n)?0.5:n});
   const[lightTextColor,setLightTextColor]=useState(()=>localStorage.getItem('custom_text_light')||DEFAULT_LIGHT_TEXT),[darkTextColor,setDarkTextColor]=useState(()=>localStorage.getItem('custom_text_dark')||DEFAULT_DARK_TEXT);
   const[formData,setFormData]=useState({id:null,name:'',url:'',icon_url:'',parent_label:'',parent_color:COLOR_PRESETS[0],child_label:'',child_color:COLOR_PRESETS[1],isLocal:false}),[searchTerm,setSearchTerm]=useState(''),[showFilterPanel,setShowFilterPanel]=useState(false),[activeParentFilter,setActiveParentFilter]=useState(null),[activeChildFilter,setActiveChildFilter]=useState(null),[copiedId,setCopiedId]=useState(null),[isAdmin,setIsAdmin]=useState(false),[showLoginModal,setShowLoginModal]=useState(false),[showAddModal,setShowAddModal]=useState(false),[showInsightsModal,setShowInsightsModal]=useState(false),[insightsData,setInsightsData]=useState(null),[loginCreds,setLoginCreds]=useState({username:'',password:''}),[loginError,setLoginError]=useState(''),[sortBy,setSortBy]=useState('default'),[tenant,setTenant]=useState(()=>normalizeTenant(localStorage.getItem('tenant'))),
-  [bgUrlInput,setBgUrlInput]=useState('');
+  [bgUrlInput,setBgUrlInput]=useState(''),[isEditingPage,setIsEditingPage]=useState(false),[pageInput,setPageInput]=useState('');
 
   const [currentPage,setCurrentPage]=useState(0),[touchStartX,setTouchStartX]=useState(null),[itemsPerPage,setItemsPerPage]=useState(DEFAULT_ITEMS_PER_PAGE);
   const [clientOrder,setClientOrder]=useState(()=>{const r=localStorage.getItem('shortcut_order_'+tenant);return r?JSON.parse(r):[]}),[draggingId,setDraggingId]=useState(null);
@@ -145,6 +145,16 @@ export default function App(){
   const isLastPage=currentPage===totalPages-1;
   if(loading)return<div className={`min-h-screen flex items-center justify-center ${bgClass}`}><Activity className="w-8 h-8 animate-spin text-blue-500"/></div>;
 
+  // New Pagination Helpers
+  const maxDots=6;
+  let dotStart=0;
+  if(totalPages>maxDots){
+    if(currentPage<3) dotStart=0;
+    else if(currentPage>totalPages-4) dotStart=totalPages-maxDots;
+    else dotStart=currentPage-2;
+  }
+  const visibleDots=Array.from({length:Math.min(totalPages,maxDots)}).map((_,i)=>dotStart+i);
+
   return (
     <div className={`min-h-screen font-light transition-all duration-300 bg-cover bg-center bg-no-repeat bg-fixed ${bgClass}`} style={{backgroundImage:bgImage?`url(${bgImage})`:'none',color:currentTextColor}}>
       {bgVideo&&<video className="fixed inset-0 w-full h-full object-cover -z-10" src={bgVideo} autoPlay loop muted playsInline/>}
@@ -158,7 +168,25 @@ export default function App(){
                <div className="hidden sm:flex items-center gap-1 bg-gray-200/50 dark:bg-gray-800/50 rounded-full p-1 backdrop-blur-sm"><button onClick={()=>setSortBy('default')} className={`p-1.5 rounded-full text-xs ${sortBy==='default'?'bg-white dark:bg-gray-700 shadow':'opacity-50'}`}><List size={14}/></button><button onClick={()=>setSortBy('alpha')} className={`p-1.5 rounded-full text-xs ${sortBy==='alpha'?'bg-white dark:bg-gray-700 shadow':'opacity-50'}`}>Aa</button></div>
             </div>
           </div>
-          {totalPages>1&&(<div className="pointer-events-auto w-full max-w-2xl mx-auto flex justify-center mb-1"><div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-100/80 dark:bg-gray-800/80 border border-gray-300/60 dark:border-gray-700/60 backdrop-blur-sm"><span className="text-[11px] opacity-70">Trang {currentPage+1}/{totalPages}</span><div className="flex items-center gap-1">{Array.from({length:totalPages}).map((_,i)=><button key={i} onClick={()=>setCurrentPage(i)} className={`w-2.5 h-2.5 rounded-full transition-all duration-200 border ${i===currentPage?(darkMode?'bg-white border-white scale-110':'bg-gray-800 border-gray-800 scale-110'):(darkMode?'border-white/40 bg-white/10':'border-gray-400/40 bg-gray-500/10')}`}/>)}</div></div></div>)}
+          
+          {/* NEW PAGINATION IN HEADER */}
+          {totalPages>1&&(
+            <div className="pointer-events-auto w-full max-w-2xl mx-auto flex justify-center mb-1">
+              <div className="flex items-center gap-3 px-3 py-1.5 rounded-full bg-gray-100/80 dark:bg-gray-800/80 border border-gray-300/60 dark:border-gray-700/60 backdrop-blur-sm shadow-sm">
+                {totalPages>6&&(
+                  isEditingPage?(
+                    <input autoFocus className="w-12 bg-transparent border-b border-blue-500 text-center text-[11px] outline-none" value={pageInput} onChange={e=>setPageInput(e.target.value)} onBlur={()=>{setIsEditingPage(false);setPageInput('')}} onKeyDown={e=>{if(e.key==='Enter'){const p=parseInt(pageInput)-1;if(!isNaN(p)&&p>=0&&p<totalPages)setCurrentPage(p);setIsEditingPage(false)}}}/>
+                  ):(
+                    <span className="text-[11px] opacity-70 hover:opacity-100 cursor-pointer font-medium min-w-[60px] text-center" onClick={()=>{setIsEditingPage(true);setPageInput(String(currentPage+1))}} title="Nhập số trang">Trang {currentPage+1}/{totalPages}</span>
+                  )
+                )}
+                <div className="flex items-center gap-1.5">
+                  {visibleDots.map(i=>(<button key={i} onClick={()=>setCurrentPage(i)} className={`w-2 h-2 rounded-full transition-all duration-300 border ${i===currentPage?(darkMode?'bg-white border-white scale-125':'bg-gray-800 border-gray-800 scale-125'):(darkMode?'bg-white/20 border-white/20 hover:bg-white/40':'bg-gray-400/40 border-gray-400/40 hover:bg-gray-400/60')}`}/>))}
+                </div>
+              </div>
+            </div>
+          )}
+
           {showFilterPanel&&(
             <div className={`pointer-events-auto w-full max-w-5xl mx-auto rounded-2xl p-3 shadow-lg flex flex-col gap-2 border ${modalClass} bg-opacity-95 backdrop-blur-md`}>
               <div className="flex flex-wrap gap-2"><span className="text-xs font-bold uppercase opacity-60">Nhóm:</span><button onClick={()=>setActiveParentFilter(null)} className={`px-3 py-1 text-xs rounded-full border ${!activeParentFilter?'bg-[#0A1A2F] text-white':''}`}>All</button>{uniqueParents.map(l=><button key={l} onClick={()=>setActiveParentFilter(l)} className={`px-3 py-1 text-xs rounded-full border ${activeParentFilter===l?'ring-2 ring-[#009FB8]':''}`} style={{background:labelColors[l],color:getContrastYIQ(labelColors[l])}}>{l}</button>)}</div>
@@ -166,14 +194,16 @@ export default function App(){
             </div>
           )}
         </div>
+        
+        {/* GRID - removed old pagination from bottom */}
         <div ref={gridWrapperRef} className="max-w-7xl mx-auto px-6 pb-32 pt-8 min-h-[60vh]" onWheel={e=>{const d=Math.abs(e.deltaX)>Math.abs(e.deltaY)?e.deltaX:e.deltaY;if(Math.abs(d)>40){e.preventDefault();if(d>0)goNext();else goPrev()}}} onTouchStart={e=>setTouchStartX(e.touches[0].clientX)} onTouchEnd={e=>{if(touchStartX===null)return;const d=e.changedTouches[0].clientX-touchStartX;if(Math.abs(d)>50){if(d<0)goNext();else goPrev()}setTouchStartX(null)}}>
           <div ref={gridRef} className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-4 justify-items-center">
             {pagedShortcuts.map(i=>(<div key={i.id} data-card draggable onDragStart={e=>handleDragStart(e,i.id)} onDragOver={handleDragOver} onDrop={e=>handleDrop(e,i.id)} onDragEnd={handleDragEnd} className={`group relative flex flex-col items-center w-full max-w-[100px] cursor-pointer active:scale-95 transition-transform ${draggingId===i.id?'opacity-50 scale-90':''}`} onClick={()=>handleLinkClick(i.id,i.url)}>
               <div className="absolute -top-2 -right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10 scale-90"><button onClick={e=>{e.stopPropagation();setCopiedId(i.id);navigator.clipboard.writeText(i.url);setTimeout(()=>setCopiedId(null),1000)}} className={`p-1.5 rounded-full shadow-sm border ${cardClass} bg-opacity-90`}>{copiedId===i.id?<Check size={12} className="text-green-500"/>:<Copy size={12}/>}</button>{(isAdmin||i.isLocal)&&(<><button onClick={e=>handleEdit(i,e)} className={`p-1.5 rounded-full shadow-sm border ml-1 ${cardClass}`}><Pencil size={12}/></button><button onClick={e=>{e.stopPropagation();handleDelete(i.id)}} className={`p-1.5 rounded-full shadow-sm border ml-1 ${cardClass}`}><Trash2 size={12}/></button></>)}</div>
               <button onClick={e=>handleToggleFavorite(i.id,e)} className={`absolute -top-1 -left-1 z-10 p-1 rounded-full transition-transform hover:scale-110 ${i.favorite?'text-yellow-400':'text-gray-300 opacity-0 group-hover:opacity-100'}`}><Star size={14} fill={i.favorite?"currentColor":"none"}/></button>
-              {/* NEW ICON LOGIC */}
+              {/* ICON */}
               <div data-icon className="w-16 h-16 mb-2 rounded-2xl overflow-hidden flex items-center justify-center" style={{background:"transparent",boxShadow:"none"}}>
-                {i.icon_url?(<img src={i.icon_url} className="w-full h-full object-contain" style={{borderRadius:0,boxShadow:"none",background:"transparent"}}/>):(<div className="w-14 h-14 rounded-xl flex items-center justify-center text-white text-xl font-semibold shadow-sm" style={{background:labelColors[i.parent_label]||"#4A5568",boxShadow:"none"}}>{i.name?.charAt(0).toUpperCase()}</div>)}
+                {i.icon_url?(<img src={i.icon_url} className="w-full h-full object-contain" style={{borderRadius:0,boxShadow:"none",background:"transparent"}}/>):(<div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-2 text-white text-xl font-semibold" style={{background:labelColors[i.parent_label]||"#4A5568",boxShadow:"none"}}>{i.name?.charAt(0).toUpperCase()}</div>)}
               </div>
               <span className="text-xs text-center truncate w-full px-1 leading-tight font-light" style={{textShadow:(bgImage||bgVideo||bgEmbed)?'0 1px 2px rgba(0,0,0,0.5)':'none'}}>{i.name}</span>
               <div className="flex flex-wrap justify-center gap-1 mt-1 px-1">
