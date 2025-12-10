@@ -1,9 +1,10 @@
 import React,{useState,useEffect,useRef,useMemo}from'react';import{Save,Trash2,Plus,Search,Activity,Copy,Check,Settings,LogOut,X,Filter,Tag,Upload,Download,FileUp,Pencil,Star,Moon,Sun,LayoutGrid,List,Image as ImageIcon,RotateCcw,BarChart as ChartIcon,Palette,Type,RefreshCw}from'lucide-react';
-import{BarChart,Bar,XAxis,YAxis,Tooltip,ResponsiveContainer,PieChart,Pie,Cell}from'recharts';
+import ShortcutCard from './components/ShortcutCard';
+import InsightsModal from './components/InsightsModal';
+import FilterPanel from './components/FilterPanel';
+import { LoginModal, AddEditModal } from './components/AdminModals';
 
 const COLOR_PRESETS=['#0A1A2F','#009FB8','#6D28D9','#BE123C','#059669','#C2410C','#475569'];const DEFAULT_LIGHT_TEXT='#2C2C2C',DEFAULT_DARK_TEXT='#E2E8F0';
-const CHART_COLORS=['#0088FE','#00C49F','#FFBB28','#FF8042','#8884d8','#82ca9d'];
-const getGradientStyle=h=>h?{background:`linear-gradient(135deg,${h},${h}dd)`}:{};
 const getContrastYIQ=(hex)=>{if(!hex)return'#fff';const h=hex.replace('#','');const r=parseInt(h.substr(0,2),16),g=parseInt(h.substr(2,2),16),b=parseInt(h.substr(4,2),16);return(((r*299)+(g*587)+(b*114))/1000)>=128?'#000':'#fff'};
 const normalizeTenant=t=>(t&&typeof t==='string'?t.trim():'')||'default';
 const DEFAULT_ITEMS_PER_PAGE=48;const isVideoFile=s=>typeof s==='string'&&/\.(mp4|webm|ogg)(\?|$)/i.test(s);const isYoutubeEmbed=s=>typeof s==='string'&&s.includes('youtube.com/embed/');
@@ -20,7 +21,7 @@ function normalizeYoutube(url) {
 export default function App(){
   const[shortcuts,setShortcuts]=useState([]),[labelColors,setLabelColors]=useState({}),[loading,setLoading]=useState(true),[darkMode,setDarkMode]=useState(()=>localStorage.getItem('darkMode')==='true'),[bgImage,setBgImage]=useState(null),[serverBg,setServerBg]=useState(null),[bgVideo,setBgVideo]=useState(null),[bgEmbed,setBgEmbed]=useState(null),[overlayOpacity,setOverlayOpacity]=useState(()=>{const r=localStorage.getItem('overlayOpacity');const n=parseFloat(r);return isNaN(n)?0.5:n});
   const[lightTextColor,setLightTextColor]=useState(()=>localStorage.getItem('custom_text_light')||DEFAULT_LIGHT_TEXT),[darkTextColor,setDarkTextColor]=useState(()=>localStorage.getItem('custom_text_dark')||DEFAULT_DARK_TEXT);
-  const[formData,setFormData]=useState({id:null,name:'',url:'',icon_url:'',parent_label:'',parent_color:COLOR_PRESETS[0],child_label:'',child_color:COLOR_PRESETS[1],isLocal:false}),[searchTerm,setSearchTerm]=useState(''),[showFilterPanel,setShowFilterPanel]=useState(false),[activeParentFilter,setActiveParentFilter]=useState(null),[activeChildFilter,setActiveChildFilter]=useState(null),[copiedId,setCopiedId]=useState(null),[isAdmin,setIsAdmin]=useState(false),[showLoginModal,setShowLoginModal]=useState(false),[showAddModal,setShowAddModal]=useState(false),[showInsightsModal,setShowInsightsModal]=useState(false),[insightsData,setInsightsData]=useState(null),[loginCreds,setLoginCreds]=useState({username:'',password:''}),[loginError,setLoginError]=useState(''),[sortBy,setSortBy]=useState('default'),[tenant,setTenant]=useState(()=>normalizeTenant(localStorage.getItem('tenant'))),
+  const[formData,setFormData]=useState({id:null,name:'',url:'',icon_url:'',parent_label:'',parent_color:COLOR_PRESETS[0],child_label:'',child_color:COLOR_PRESETS[1],isLocal:false}),[searchTerm,setSearchTerm]=useState(''),[showFilterPanel,setShowFilterPanel]=useState(false),[activeParentFilter,setActiveParentFilter]=useState(null),[activeChildFilter,setActiveChildFilter]=useState(null),[isAdmin,setIsAdmin]=useState(false),[showLoginModal,setShowLoginModal]=useState(false),[showAddModal,setShowAddModal]=useState(false),[showInsightsModal,setShowInsightsModal]=useState(false),[insightsData,setInsightsData]=useState(null),[loginCreds,setLoginCreds]=useState({username:'',password:''}),[loginError,setLoginError]=useState(''),[sortBy,setSortBy]=useState('default'),[tenant,setTenant]=useState(()=>normalizeTenant(localStorage.getItem('tenant'))),
   [bgUrlInput,setBgUrlInput]=useState(''),[isEditingPage,setIsEditingPage]=useState(false),[pageInput,setPageInput]=useState('');
 
   const [currentPage,setCurrentPage]=useState(0),[touchStartX,setTouchStartX]=useState(null),[itemsPerPage,setItemsPerPage]=useState(DEFAULT_ITEMS_PER_PAGE);
@@ -187,30 +188,44 @@ export default function App(){
             </div>
           )}
 
-          {showFilterPanel&&(
-            <div className={`pointer-events-auto w-full max-w-5xl mx-auto rounded-2xl p-3 shadow-lg flex flex-col gap-2 border ${modalClass} bg-opacity-95 backdrop-blur-md`}>
-              <div className="flex flex-wrap gap-2"><span className="text-xs font-bold uppercase opacity-60">Nhóm:</span><button onClick={()=>setActiveParentFilter(null)} className={`px-3 py-1 text-xs rounded-full border ${!activeParentFilter?'bg-[#0A1A2F] text-white':''}`}>All</button>{uniqueParents.map(l=><button key={l} onClick={()=>setActiveParentFilter(l)} className={`px-3 py-1 text-xs rounded-full border ${activeParentFilter===l?'ring-2 ring-[#009FB8]':''}`} style={{background:labelColors[l],color:getContrastYIQ(labelColors[l])}}>{l}</button>)}</div>
-              {uniqueChildren.length>0&&<div className="flex flex-wrap gap-2 pt-2 border-t border-gray-500/20"><span className="text-xs font-bold opacity-60">Tag:</span>{uniqueChildren.map(l=><button key={l} onClick={()=>setActiveChildFilter(activeChildFilter===l?null:l)} className={`px-2 py-0.5 text-[10px] rounded-full border ${activeChildFilter===l?'bg-[#009FB8] text-white':''}`} style={activeChildFilter===l&&labelColors[l]?{background:labelColors[l],borderColor:labelColors[l],color:getContrastYIQ(labelColors[l])}:{}}>{l}</button>)}</div>}
-            </div>
-          )}
+          <FilterPanel 
+            isOpen={showFilterPanel}
+            activeParentFilter={activeParentFilter}
+            setActiveParentFilter={setActiveParentFilter}
+            activeChildFilter={activeChildFilter}
+            setActiveChildFilter={setActiveChildFilter}
+            uniqueParents={uniqueParents}
+            uniqueChildren={uniqueChildren}
+            labelColors={labelColors}
+            modalClass={modalClass}
+            getContrastYIQ={getContrastYIQ}
+          />
         </div>
         
-        {/* GRID - removed old pagination from bottom */}
+        {/* GRID */}
         <div ref={gridWrapperRef} className="max-w-7xl mx-auto px-6 pb-32 pt-8 min-h-[60vh]" style={{overflow:"hidden"}} onWheel={e=>{e.preventDefault();if(e.deltaY>0||e.deltaX>0)goNext();else goPrev()}} onTouchStart={e=>setTouchStartX(e.touches[0].clientX)} onTouchMove={e=>e.preventDefault()} onTouchEnd={e=>{if(touchStartX===null)return;const d=e.changedTouches[0].clientX-touchStartX;if(Math.abs(d)>50){if(d<0)goNext();else goPrev()}setTouchStartX(null)}}>
           <div ref={gridRef} className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-4 justify-items-center">
-            {pagedShortcuts.map(i=>(<div key={i.id} data-card draggable onDragStart={e=>handleDragStart(e,i.id)} onDragOver={handleDragOver} onDrop={e=>handleDrop(e,i.id)} onDragEnd={handleDragEnd} className={`group relative flex flex-col items-center w-full max-w-[100px] cursor-pointer active:scale-95 transition-transform ${draggingId===i.id?'opacity-50 scale-90':''}`} onClick={()=>handleLinkClick(i.id,i.url)}>
-              <div className="absolute -top-2 -right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10 scale-90"><button onClick={e=>{e.stopPropagation();setCopiedId(i.id);navigator.clipboard.writeText(i.url);setTimeout(()=>setCopiedId(null),1000)}} className={`p-1.5 rounded-full shadow-sm border ${cardClass} bg-opacity-90`}>{copiedId===i.id?<Check size={12} className="text-green-500"/>:<Copy size={12}/>}</button>{(isAdmin||i.isLocal)&&(<><button onClick={e=>handleEdit(i,e)} className={`p-1.5 rounded-full shadow-sm border ml-1 ${cardClass}`}><Pencil size={12}/></button><button onClick={e=>{e.stopPropagation();handleDelete(i.id)}} className={`p-1.5 rounded-full shadow-sm border ml-1 ${cardClass}`}><Trash2 size={12}/></button></>)}</div>
-              <button onClick={e=>handleToggleFavorite(i.id,e)} className={`absolute -top-1 -left-1 z-10 p-1 rounded-full transition-transform hover:scale-110 ${i.favorite?'text-yellow-400':'text-gray-300 opacity-0 group-hover:opacity-100'}`}><Star size={14} fill={i.favorite?"currentColor":"none"}/></button>
-              {/* ICON */}
-              <div data-icon className="w-16 h-16 mb-2 rounded-2xl overflow-hidden flex items-center justify-center" style={{background:"transparent",boxShadow:"none"}}>
-                {i.icon_url?(<img src={i.icon_url} className="w-full h-full object-contain" style={{borderRadius:0,boxShadow:"none",background:"transparent"}}/>):(<div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-2 text-white text-xl font-semibold" style={{background:labelColors[i.parent_label]||"#4A5568",boxShadow:"none"}}>{i.name?.charAt(0).toUpperCase()}</div>)}
-              </div>
-              <span className="text-xs text-center truncate w-full px-1 leading-tight font-light" style={{textShadow:(bgImage||bgVideo||bgEmbed)?'0 1px 2px rgba(0,0,0,0.5)':'none'}}>{i.name}</span>
-              <div className="flex flex-wrap justify-center gap-1 mt-1 px-1">
-                {i.parent_label&&<span className="text-[8px] px-1 py-0.5 rounded-full text-white truncate max-w-[60px] shadow-sm mb-0.5" style={{background:labelColors[i.parent_label]||'#9CA3AF',color:getContrastYIQ(labelColors[i.parent_label]||'#9CA3AF')}}>{i.parent_label}</span>}
-                {(i.child_label||'').split(',').filter(Boolean).map(t=><span key={t} className={`text-[8px] px-1 py-0.5 rounded-full border truncate max-w-[60px] bg-white/50 backdrop-blur-sm ${darkMode?'border-gray-600':'border-gray-300'}`} style={{borderColor:labelColors[t?.trim()],color:labelColors[t?.trim()]||(darkMode?'#ddd':'#333')}}>{t.trim()}</span>)}
-              </div>
-            </div>))}
+            {pagedShortcuts.map(i=>(
+              <ShortcutCard 
+                key={i.id}
+                item={i}
+                isAdmin={isAdmin}
+                handleDragStart={handleDragStart}
+                handleDragOver={handleDragOver}
+                handleDrop={handleDrop}
+                handleDragEnd={handleDragEnd}
+                handleLinkClick={handleLinkClick}
+                handleEdit={handleEdit}
+                handleDelete={handleDelete}
+                handleToggleFavorite={handleToggleFavorite}
+                cardClass={cardClass}
+                labelColors={labelColors}
+                bgOverlay={(bgImage||bgVideo||bgEmbed)}
+                draggingId={draggingId}
+                darkMode={darkMode}
+                getContrastYIQ={getContrastYIQ}
+              />
+            ))}
             {isLastPage&&(
               <div className="flex flex-col items-center w-full max-w-[100px] cursor-pointer group" onClick={()=>{resetForm();setShowAddModal(true)}}><div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all mb-2 backdrop-blur-sm bg-white/10 dark:bg-black/10 hover:bg-emerald-500/10`}><Plus size={24} className="opacity-50 font-light"/></div><span className="text-xs font-light opacity-50">Thêm App</span></div>
             )}
@@ -247,35 +262,40 @@ export default function App(){
             <div className="w-10 h-10 flex items-center justify-center bg-white/20 backdrop-blur-md rounded-full border border-white/30 text-white shadow-lg cursor-pointer group-hover/menu:hidden absolute bottom-0 right-0 pointer-events-none"><Settings size={20} className="animate-spin-slow"/></div>
           </div>
         </div>
-        {showInsightsModal&&insightsData&&(
-          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-            <div className={`rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6 ${modalClass}`}>
-              <div className="flex justify-between items-center mb-6"><div className="flex items-center gap-4"><h3 className="font-bold text-xl flex items-center gap-2"><ChartIcon className="text-orange-500"/> Phân tích</h3><button onClick={handleExportStats} className="text-xs flex items-center gap-1 text-blue-500 hover:underline bg-blue-500/10 px-2 py-1 rounded"><Download size={12}/> Xuất CSV đầy đủ</button><button onClick={handleExportSummary} className="text-xs flex items-center gap-1 text-emerald-500 hover:underline bg-emerald-500/10 px-2 py-1 rounded"><Download size={12}/> CSV tóm tắt</button></div><button onClick={()=>setShowInsightsModal(false)}><X size={24}/></button></div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6"><div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20"><p className="text-sm opacity-70">Tổng Click</p><p className="text-3xl font-bold text-blue-500">{insightsData.totalClicks}</p></div><div className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/20"><p className="text-sm opacity-70">Top 1 App</p><p className="text-xl font-bold text-purple-500 truncate">{insightsData.topApps[0]?.name||'N/A'}</p></div></div>
-              <div className="space-y-6">
-                <div className="p-4 rounded-xl border border-gray-500/20"><h4 className="text-sm font-bold mb-4 opacity-80">Top 10 Ứng Dụng</h4>
-                  <div className="h-56"><ResponsiveContainer width="100%" height="100%"><BarChart data={insightsData.topApps}><XAxis dataKey="name" tick={{fontSize:10}} tickLine={false} axisLine={false} interval={0} angle={-35} textAnchor="end" height={60}/><YAxis tick={{fontSize:10}}/><Tooltip cursor={{fill:'rgba(148,163,184,0.15)'}}/><Bar dataKey="count" radius={[4,4,0,0]}>{insightsData.topApps.map((a,i)=>(<Cell key={`cell-${i}`} fill={CHART_COLORS[i%CHART_COLORS.length]}/>))}</Bar></BarChart></ResponsiveContainer></div>
-                </div>
-                <div className="p-4 rounded-xl border border-gray-500/20"><h4 className="text-sm font-bold mb-4 opacity-80">Hoạt động (7 ngày qua)</h4>
-                   <div className="h-56"><ResponsiveContainer width="100%" height="100%"><BarChart data={insightsData.timeline}><XAxis dataKey="d" tick={{fontSize:10}} tickLine={false} axisLine={false} interval={0}/><YAxis tick={{fontSize:10}}/><Tooltip cursor={{fill:'rgba(148,163,184,0.15)'}}/><Bar dataKey="count" fill="#10B981" radius={[4,4,0,0]}/></BarChart></ResponsiveContainer></div>
-                </div>
-                <div className="p-4 rounded-xl border border-gray-500/20"><h4 className="text-sm font-bold mb-4 opacity-80">Theo giờ</h4>
-                   <div className="h-56"><ResponsiveContainer width="100%" height="100%"><BarChart data={insightsData.hourly.map(h=>({hour:`${h.h}h`,count:h.count}))}><XAxis dataKey="hour" tick={{fontSize:10}} tickLine={false} axisLine={false} interval={0}/><YAxis tick={{fontSize:10}}/><Tooltip cursor={{fill:'rgba(148,163,184,0.15)'}}/><Bar dataKey="count" fill="#8884d8" radius={[4,4,0,0]}/></BarChart></ResponsiveContainer></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        
+        <InsightsModal 
+          isOpen={showInsightsModal} 
+          onClose={() => setShowInsightsModal(false)}
+          data={insightsData}
+          onExportStats={handleExportStats}
+          onExportSummary={handleExportSummary}
+          modalClass={modalClass}
+        />
 
-        {showLoginModal&&(
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"><div className={`rounded-2xl shadow-2xl w-full max-w-xs p-6 border ${modalClass}`}><div className="flex justify-between items-center mb-6"><h3 className="font-bold">Admin</h3><button onClick={()=>setShowLoginModal(false)}><X size={20}/></button></div><form onSubmit={handleLogin} className="space-y-4"><input type="text" placeholder="User" className={`w-full px-4 py-2 rounded-lg text-sm border ${inputClass}`} value={loginCreds.username} onChange={e=>setLoginCreds({...loginCreds,username:e.target.value})}/><input type="password" placeholder="Pass" className={`w-full px-4 py-2 rounded-lg text-sm border ${inputClass}`} value={loginCreds.password} onChange={e=>setLoginCreds({...loginCreds,password:e.target.value})}/>{loginError&&<p className="text-red-500 text-xs">{loginError}</p>}<button className="w-full py-2 bg-[#0F2F55] text-white rounded-lg hover:bg-opacity-90">Login</button></form></div></div>
-        )}
-        {showAddModal&&(
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"><div className={`rounded-2xl shadow-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto border ${modalClass}`}><div className="flex justify-between items-center mb-4"><h3 className="font-bold">{formData.id?'Sửa':'Thêm'} App</h3><button onClick={()=>setShowAddModal(false)}><X size={20}/></button></div><form onSubmit={handleSubmit} className="space-y-3"><input type="text" placeholder="Tên" className={`w-full px-4 py-3 rounded-xl text-sm border ${inputClass}`} value={formData.name} onChange={e=>setFormData({...formData,name:e.target.value})} required/><input type="url" placeholder="URL" className={`w-full px-4 py-3 rounded-xl text-sm border ${inputClass}`} value={formData.url} onChange={e=>setFormData({...formData,url:e.target.value})} required/>
-          <div onClick={() => fileInputRef.current?.click()} className={`w-full px-4 py-3 rounded-xl cursor-pointer flex items-center gap-3 border ${inputClass} hover:opacity-80`}>{formData.icon_url?<img src={formData.icon_url} className="w-10 h-10 rounded border object-cover"/>:<div className="w-10 h-10 rounded bg-gray-500/20 flex items-center justify-center"><Upload size={20}/></div>}<div><p className="text-sm font-medium">Tải icon lên</p></div></div><input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageUpload}/>
-          <input type="text" placeholder="Hoặc dán link ảnh (https://...)" className={`w-full px-4 py-2 rounded-xl text-sm border ${inputClass}`} value={formData.icon_url?.startsWith('data:')?'':formData.icon_url} onChange={e=>setFormData({...formData,icon_url:e.target.value})}/>
-          <div className={`border-t pt-3 space-y-4 ${darkMode?'border-gray-700':'border-gray-200'}`}><div className="grid grid-cols-[1fr_auto] gap-2 items-center"><input type="text" placeholder="Nhóm lớn" className={`px-3 py-2 rounded-lg text-sm border ${inputClass}`} value={formData.parent_label} onChange={e=>setFormData({...formData,parent_label:e.target.value})}/><div className="relative w-8 h-8 rounded-full border overflow-hidden cursor-pointer"><input type="color" className="absolute -top-2 -left-2 w-12 h-12" value={formData.parent_color} onChange={e=>setFormData({...formData,parent_color:e.target.value})}/></div></div><div className="grid grid-cols-[1fr_auto] gap-2 items-center"><input type="text" placeholder="Nhóm con (cách nhau phẩy)" className={`px-3 py-2 rounded-lg text-sm border ${inputClass}`} value={formData.child_label} onChange={e=>setFormData({...formData,child_label:e.target.value})}/><div className="relative w-8 h-8 rounded-full border overflow-hidden cursor-pointer"><input type="color" className="absolute -top-2 -left-2 w-12 h-12" value={formData.child_color} onChange={e=>setFormData({...formData,child_color:e.target.value})}/></div></div></div><button className="w-full py-3 bg-[#0F2F55] text-white rounded-xl mt-2 hover:bg-opacity-90">Lưu</button></form></div></div>
-        )}
+        <LoginModal 
+          isOpen={showLoginModal}
+          onClose={() => setShowLoginModal(false)}
+          creds={loginCreds}
+          setCreds={setLoginCreds}
+          onLogin={handleLogin}
+          error={loginError}
+          modalClass={modalClass}
+          inputClass={inputClass}
+        />
+
+        <AddEditModal 
+          isOpen={showAddModal}
+          onClose={() => setShowAddModal(false)}
+          formData={formData}
+          setFormData={setFormData}
+          onSubmit={handleSubmit}
+          fileInputRef={fileInputRef}
+          onImageUpload={handleImageUpload}
+          modalClass={modalClass}
+          inputClass={inputClass}
+          darkMode={darkMode}
+          isEdit={!!formData.id}
+        />
       </div>
     </div>
   );
