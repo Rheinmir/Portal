@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends libvips && rm -
 COPY package*.json ./
 RUN npm install --omit=dev
 COPY --from=build /app/dist ./dist
-COPY server.js .
+COPY server ./server
 RUN mkdir -p /app/data /app/data/backup
 EXPOSE 5464
-CMD ["node", "server.js"]
+CMD ["node", "server/index.js"]
