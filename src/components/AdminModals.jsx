@@ -165,3 +165,47 @@ export function AddEditModal({
     </div>
   );
 }
+
+export function SettingsModal({ isOpen, onClose, config, onSave, modalClass, inputClass }) {
+  const [localConfig, setLocalConfig] = React.useState(config);
+
+  React.useEffect(() => {
+    setLocalConfig(config);
+  }, [config, isOpen]);
+
+  const handleChange = (key, value) => {
+    setLocalConfig(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handleSave = (e) => {
+    e.preventDefault();
+    onSave(localConfig);
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className={`w-full max-w-sm p-6 rounded-2xl shadow-xl transition-all ${modalClass}`} onClick={e => e.stopPropagation()}>
+        <h2 className="text-xl font-semibold mb-4">Cài đặt hệ thống</h2>
+        <form onSubmit={handleSave} className="flex flex-col gap-4">
+          <div>
+            <label className="block text-xs uppercase opacity-70 mb-1">Múi giờ (UTC Offset)</label>
+            <input 
+              type="number" 
+              className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 focus:ring-blue-500 ${inputClass}`}
+              value={localConfig.utcOffset}
+              onChange={e => handleChange('utcOffset', parseFloat(e.target.value))}
+              step="0.5"
+            />
+            <p className="text-[10px] opacity-50 mt-1">Ví dụ: Việt Nam là 7</p>
+          </div>
+          <div className="flex justify-end gap-2 mt-2">
+            <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-sm hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">Hủy</button>
+            <button type="submit" className="px-4 py-2 rounded-lg text-sm bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-500/30 transition-all">Lưu</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}

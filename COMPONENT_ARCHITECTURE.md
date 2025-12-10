@@ -127,4 +127,34 @@ Conditionally rendered when `showInsightsModal` is true.
   darkMode={darkMode}
   isEdit={!!formData.id}                  // Switch betwen "Add" and "Edit" title
 />
+
+### SettingsModal
+**Functionality**: Allows modifying global configuration like Timezone.
+- Inputs: UTC Offset.
+
+**Usage**:
+```jsx
+<SettingsModal
+  isOpen={showSettingsModal}
+  onClose={() => setShowSettingsModal(false)}
+  config={{ utcOffset }}
+  onSave={handleSaveSettings}
+  modalClass={modalClass}
+  inputClass={inputClass}
+/>
+```
+
+---
+
+## 5. Clock (`src/components/Clock.jsx`)
+
+**Functionality**:
+- Displays current time based on a configurable UTC offset.
+- Updates every second.
+
+**Usage in `App.jsx`**:
+- **Desktop**: Rendered to the left of the search bar.
+- **Mobile**: Rendered to the left of the pagination controls.
+```jsx
+<Clock utcOffset={utcOffset} className="...classes..." />
 ```
