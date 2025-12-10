@@ -65,9 +65,12 @@ pipeline {
                      // Ensure we have the image locally (in case we skipped build)
                      sh "docker pull ${fullImageName}"
 
+                     // Cleanup potential old container names
                      sh """
                      docker stop ${CONTAINER_NAME} || true
                      docker rm ${CONTAINER_NAME} || true
+                     docker stop shortcut-manager-sqlite-server || true
+                     docker rm shortcut-manager-sqlite-server || true
                      
                      docker run -d --name ${CONTAINER_NAME} \
                          --restart unless-stopped \
