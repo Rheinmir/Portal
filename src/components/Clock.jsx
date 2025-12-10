@@ -25,7 +25,7 @@ export default function Clock({ utcOffset = 7, className = '' }) {
   };
 
   return (
-    <div className={`font-mono text-xl font-bold tracking-widest opacity-80 ${className}`}>
+    <div className={`font-['Lexend_Deca'] font-light text-xl tracking-wider opacity-90 ${className}`} style={{ fontVariationSettings: '"wght" 300' }}>
       {getManuallyOffsetTime()}
     </div>
   );

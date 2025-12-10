@@ -25,6 +25,7 @@ export default function App(){
   const[formData,setFormData]=useState({id:null,name:'',url:'',icon_url:'',parent_label:'',parent_color:COLOR_PRESETS[0],child_label:'',child_color:COLOR_PRESETS[1],isLocal:false}),[searchTerm,setSearchTerm]=useState(''),[showFilterPanel,setShowFilterPanel]=useState(false),[activeParentFilter,setActiveParentFilter]=useState(null),[activeChildFilter,setActiveChildFilter]=useState(null),[isAdmin,setIsAdmin]=useState(false),[showLoginModal,setShowLoginModal]=useState(false),[showAddModal,setShowAddModal]=useState(false),[showInsightsModal,setShowInsightsModal]=useState(false),[showSettingsModal,setShowSettingsModal]=useState(false),[insightsData,setInsightsData]=useState(null),[loginCreds,setLoginCreds]=useState({username:'',password:''}),[loginError,setLoginError]=useState(''),[sortBy,setSortBy]=useState('default'),[tenant,setTenant]=useState(()=>normalizeTenant(localStorage.getItem('tenant'))),
   [bgUrlInput,setBgUrlInput]=useState(''),[isEditingPage,setIsEditingPage]=useState(false),[pageInput,setPageInput]=useState('');
   const [utcOffset, setUtcOffset] = useState(7);
+  const [showColorPicker, setShowColorPicker] = useState(false);
 
   const [currentPage,setCurrentPage]=useState(0),[touchStartX,setTouchStartX]=useState(null),[itemsPerPage,setItemsPerPage]=useState(DEFAULT_ITEMS_PER_PAGE);
   const [clientOrder,setClientOrder]=useState(()=>{const r=localStorage.getItem('shortcut_order_'+tenant);return r?JSON.parse(r):[]}),[draggingId,setDraggingId]=useState(null);
@@ -36,6 +37,17 @@ export default function App(){
     html.style.overflow='hidden'; body.style.overflow='hidden';
     return()=>{html.style.overflow=p1;body.style.overflow=p2}
   },[]);
+
+  // Close color picker when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (showColorPicker && !e.target.closest('.color-picker-popover') && !e.target.closest('.color-picker-trigger')) {
+        setShowColorPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showColorPicker]);
 
   useEffect(()=>{if(darkMode)document.documentElement.classList.add('dark');else document.documentElement.classList.remove('dark');localStorage.setItem('darkMode',darkMode)},[darkMode]);
   useEffect(()=>{const r=localStorage.getItem('shortcut_order_'+tenant);setClientOrder(r?JSON.parse(r):[])},[tenant]);
@@ -209,7 +221,7 @@ export default function App(){
         <div className="sticky top-0 z-30 w-full flex flex-col pt-4 px-4 gap-2 pointer-events-none">
           <div className="pointer-events-auto w-full max-w-2xl mx-auto flex items-center justify-center gap-3 relative">
             {/* CLOCK DESKTOP: Left of Search */}
-            <div className="hidden sm:block absolute left-[-100px] top-1/2 -translate-y-1/2">
+            <div className="hidden sm:block absolute left-[-150px] top-1/2 -translate-y-1/2">
                 <Clock utcOffset={utcOffset} />
             </div>
 
@@ -225,7 +237,7 @@ export default function App(){
             <div className="pointer-events-auto w-full max-w-2xl mx-auto flex justify-center mb-1 relative">
                {/* CLOCK MOBILE: Left of Pagination */}
                <div className="sm:hidden absolute left-0 top-1/2 -translate-y-1/2 ml-2">
-                 <Clock utcOffset={utcOffset} className="text-xs" />
+                 <Clock utcOffset={utcOffset} className="text-sm" />
                </div>
 
               <div className="flex items-center gap-3 px-3 py-1.5 rounded-full bg-gray-100/80 dark:bg-gray-800/80 border border-gray-300/60 dark:border-gray-700/60 backdrop-blur-sm shadow-sm">
@@ -292,14 +304,37 @@ export default function App(){
             <div className="flex items-center gap-2">
             {(bgImage||bgVideo||bgEmbed)&&<div className="flex items-center gap-1 mr-2 bg-black/40 rounded-full px-2 py-1 backdrop-blur-sm"><span className="text-[10px] text-white/90 font-bold">BG</span><input type="range" min="0" max="0.9" step="0.1" value={overlayOpacity} onChange={e=>{const v=parseFloat(e.target.value);setOverlayOpacity(v);localStorage.setItem('overlayOpacity',v);if(isAdmin)saveConfig('overlay_opacity',v)}} className="w-16 h-1 accent-[#009FB8] cursor-pointer"/></div>}
             <button onClick={()=>setDarkMode(!darkMode)} className={`p-2 rounded-full border shadow-sm ${inputClass} ${(bgImage||bgVideo||bgEmbed)?'bg-opacity-80':''}`}>{darkMode?<Sun size={18} className="text-yellow-400"/>:<Moon size={18} className="text-gray-600"/>}</button>
-            <div className={`flex items-center gap-1 p-1 rounded-full border shadow-lg ${inputClass} bg-opacity-80 backdrop-blur`}>
-              {/* RE-ORDERED: Color Pickers FIRST */}
-              <div className="flex flex-col gap-0.5 mr-1 border-r border-gray-400/30 pr-1">
-                <div className="flex items-center gap-1" title="Text Light"><input type="color" value={lightTextColor} onChange={e=>handleTextColorChange('light',e.target.value)} className="w-4 h-4 p-0 border-none bg-transparent cursor-pointer"/></div>
-                <div className="flex items-center gap-1" title="Text Dark"><input type="color" value={darkTextColor} onChange={e=>handleTextColorChange('dark',e.target.value)} className="w-4 h-4 p-0 border-none bg-transparent cursor-pointer"/></div>
+            <div className={`flex items-center gap-1 p-1 rounded-full border shadow-lg ${inputClass} bg-opacity-80 backdrop-blur relative`}>
+              
+              {/* NEW PALETTE POPOVER TRIGGER */}
+              <div className="relative z-50">
+                <button 
+                  onClick={() => setShowColorPicker(!showColorPicker)}
+                  className={`color-picker-trigger p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full ${showColorPicker ? 'bg-blue-100 dark:bg-blue-900 text-blue-500' : ''}`} 
+                  title="Màu chữ"
+                >
+                  <Palette size={16}/>
+                </button>
+
+                {showColorPicker && (
+                    <div className="color-picker-popover absolute bottom-full mb-3 left-1/2 -translate-x-1/2 p-3 rounded-xl bg-white dark:bg-gray-800 shadow-xl border border-gray-200 dark:border-gray-700 min-w-[120px] flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-2">
+                        <div className="grid grid-cols-[auto_1fr] gap-2 items-center">
+                            <input type="color" value={lightTextColor} onChange={e=>handleTextColorChange('light',e.target.value)} className="w-6 h-6 p-0 border-none bg-transparent cursor-pointer rounded-full overflow-hidden"/>
+                            <span className="text-[10px] font-medium opacity-70">Text Light</span>
+                        </div>
+                        <div className="grid grid-cols-[auto_1fr] gap-2 items-center">
+                             <input type="color" value={darkTextColor} onChange={e=>handleTextColorChange('dark',e.target.value)} className="w-6 h-6 p-0 border-none bg-transparent cursor-pointer rounded-full overflow-hidden"/>
+                             <span className="text-[10px] font-medium opacity-70">Text Dark</span>
+                        </div>
+                        {/* Little triangle arrow */}
+                        <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-white dark:border-t-gray-800"></div>
+                    </div>
+                )}
               </div>
               
-              {/* Then Media Controls */}
+              <div className="w-px h-4 bg-gray-300 mx-1"></div>
+
+              {/* Media Controls */}
               <button onClick={()=>bgInputRef.current?.click()} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"><ImageIcon size={16}/></button><input type="file" ref={bgInputRef} className="hidden" accept="image/*,video/*" onChange={handleBgUpload}/>
               <div className="hidden sm:flex items-center gap-1 ml-1"><input type="text" placeholder="Link ảnh/GIF" className={`px-2 py-1 text-[11px] rounded-full border max-w-[120px] ${inputClass}`} value={bgUrlInput} onChange={e=>setBgUrlInput(e.target.value)}/><button type="button" onClick={applyBgUrl} className="px-2 py-1 text-[11px] rounded-full border border-gray-400/50 hover:bg-gray-200 dark:hover:bg-gray-700">Set</button></div>
               
@@ -312,7 +347,6 @@ export default function App(){
                 <input type="file" ref={importInputRef} className="hidden" accept=".json" onChange={handleImportData}/>
                 <button onClick={handleClearMedia} className="p-1.5 hover:bg-red-100 dark:hover:bg-red-900 rounded-full text-red-500" title="Xóa nền"><Trash2 size={16}/></button>
                 <div className="w-px h-4 bg-gray-300 mx-1"></div>
-                {/* NEW SETTINGS BUTTON */}
                 <button onClick={()=>setShowSettingsModal(true)} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"><Settings size={16}/></button>
                 <button onClick={()=>setIsAdmin(false)} className="p-1.5 hover:bg-red-100 dark:hover:bg-red-900 rounded-full text-red-500"><LogOut size={16}/></button>
               </>)}
