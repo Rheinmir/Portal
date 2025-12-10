@@ -236,7 +236,7 @@ export default function App(){
           {totalPages>1&&(
             <div className="pointer-events-auto w-full max-w-2xl mx-auto flex justify-center mb-1 relative">
                {/* CLOCK MOBILE: Left of Pagination */}
-               <div className="sm:hidden absolute left-0 top-1/2 -translate-y-1/2 ml-2">
+               <div className="sm:hidden absolute left-6 top-1/2 -translate-y-1/2">
                  <Clock utcOffset={utcOffset} className="text-sm" />
                </div>
 
