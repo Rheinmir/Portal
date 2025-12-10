@@ -2,7 +2,8 @@ import React,{useState,useEffect,useRef,useMemo}from'react';import{Save,Trash2,P
 import ShortcutCard from './components/ShortcutCard';
 import InsightsModal from './components/InsightsModal';
 import FilterPanel from './components/FilterPanel';
-import { LoginModal, AddEditModal } from './components/AdminModals';
+import Clock from './components/Clock';
+import { LoginModal, AddEditModal, SettingsModal } from './components/AdminModals';
 
 const COLOR_PRESETS=['#0A1A2F','#009FB8','#6D28D9','#BE123C','#059669','#C2410C','#475569'];const DEFAULT_LIGHT_TEXT='#2C2C2C',DEFAULT_DARK_TEXT='#E2E8F0';
 const getContrastYIQ=(hex)=>{if(!hex)return'#fff';const h=hex.replace('#','');const r=parseInt(h.substr(0,2),16),g=parseInt(h.substr(2,2),16),b=parseInt(h.substr(4,2),16);return(((r*299)+(g*587)+(b*114))/1000)>=128?'#000':'#fff'};
@@ -21,8 +22,9 @@ function normalizeYoutube(url) {
 export default function App(){
   const[shortcuts,setShortcuts]=useState([]),[labelColors,setLabelColors]=useState({}),[loading,setLoading]=useState(true),[darkMode,setDarkMode]=useState(()=>localStorage.getItem('darkMode')==='true'),[bgImage,setBgImage]=useState(null),[serverBg,setServerBg]=useState(null),[bgVideo,setBgVideo]=useState(null),[bgEmbed,setBgEmbed]=useState(null),[overlayOpacity,setOverlayOpacity]=useState(()=>{const r=localStorage.getItem('overlayOpacity');const n=parseFloat(r);return isNaN(n)?0.5:n});
   const[lightTextColor,setLightTextColor]=useState(()=>localStorage.getItem('custom_text_light')||DEFAULT_LIGHT_TEXT),[darkTextColor,setDarkTextColor]=useState(()=>localStorage.getItem('custom_text_dark')||DEFAULT_DARK_TEXT);
-  const[formData,setFormData]=useState({id:null,name:'',url:'',icon_url:'',parent_label:'',parent_color:COLOR_PRESETS[0],child_label:'',child_color:COLOR_PRESETS[1],isLocal:false}),[searchTerm,setSearchTerm]=useState(''),[showFilterPanel,setShowFilterPanel]=useState(false),[activeParentFilter,setActiveParentFilter]=useState(null),[activeChildFilter,setActiveChildFilter]=useState(null),[isAdmin,setIsAdmin]=useState(false),[showLoginModal,setShowLoginModal]=useState(false),[showAddModal,setShowAddModal]=useState(false),[showInsightsModal,setShowInsightsModal]=useState(false),[insightsData,setInsightsData]=useState(null),[loginCreds,setLoginCreds]=useState({username:'',password:''}),[loginError,setLoginError]=useState(''),[sortBy,setSortBy]=useState('default'),[tenant,setTenant]=useState(()=>normalizeTenant(localStorage.getItem('tenant'))),
+  const[formData,setFormData]=useState({id:null,name:'',url:'',icon_url:'',parent_label:'',parent_color:COLOR_PRESETS[0],child_label:'',child_color:COLOR_PRESETS[1],isLocal:false}),[searchTerm,setSearchTerm]=useState(''),[showFilterPanel,setShowFilterPanel]=useState(false),[activeParentFilter,setActiveParentFilter]=useState(null),[activeChildFilter,setActiveChildFilter]=useState(null),[isAdmin,setIsAdmin]=useState(false),[showLoginModal,setShowLoginModal]=useState(false),[showAddModal,setShowAddModal]=useState(false),[showInsightsModal,setShowInsightsModal]=useState(false),[showSettingsModal,setShowSettingsModal]=useState(false),[insightsData,setInsightsData]=useState(null),[loginCreds,setLoginCreds]=useState({username:'',password:''}),[loginError,setLoginError]=useState(''),[sortBy,setSortBy]=useState('default'),[tenant,setTenant]=useState(()=>normalizeTenant(localStorage.getItem('tenant'))),
   [bgUrlInput,setBgUrlInput]=useState(''),[isEditingPage,setIsEditingPage]=useState(false),[pageInput,setPageInput]=useState('');
+  const [utcOffset, setUtcOffset] = useState(7);
 
   const [currentPage,setCurrentPage]=useState(0),[touchStartX,setTouchStartX]=useState(null),[itemsPerPage,setItemsPerPage]=useState(DEFAULT_ITEMS_PER_PAGE);
   const [clientOrder,setClientOrder]=useState(()=>{const r=localStorage.getItem('shortcut_order_'+tenant);return r?JSON.parse(r):[]}),[draggingId,setDraggingId]=useState(null);
@@ -45,6 +47,10 @@ export default function App(){
     if(isYoutubeEmbed(src)){setBgEmbed(src);setBgImage(null);setBgVideo(null)}else if(isVideoFile(src)){setBgVideo(src);setBgImage(null);setBgEmbed(null)}else{setBgImage(src);setBgVideo(null);setBgEmbed(null)}
   };
   const fetchData=async()=>{try{const r=await fetch('/api/data?tenant='+encodeURIComponent(tenant));const d=await r.json();const ss=d.shortcuts||[];const ls=JSON.parse(localStorage.getItem('local_shortcuts')||'[]').map(s=>({...s,isLocal:true,child_label:(s.child_label||'').includes('Personal')?s.child_label:(s.child_label?(s.child_label+', Personal'):'Personal')}));setShortcuts([...ss,...ls]);setLabelColors(d.labelColors||{});const c=d.appConfig||{};const serverVer=Number(c.config_version||0);const localVer=Number(localStorage.getItem('config_version')||0);
+      
+      const srvUtc = c.utc_offset != null ? Number(c.utc_offset) : 7;
+      setUtcOffset(srvUtc);
+
       if(serverVer > localVer) {localStorage.removeItem('custom_bg');localStorage.removeItem('custom_text_light');localStorage.removeItem('custom_text_dark');localStorage.removeItem('overlayOpacity');localStorage.removeItem('darkMode');localStorage.setItem('config_version', serverVer);applyBackgroundSource(c.default_background||null,true);setLightTextColor(c.text_color_light||DEFAULT_LIGHT_TEXT);setDarkTextColor(c.text_color_dark||DEFAULT_DARK_TEXT);const srvOpacity = c.overlay_opacity != null ? Number(c.overlay_opacity) : 0.5; setOverlayOpacity(isNaN(srvOpacity) ? 0.5 : srvOpacity);const srvDark = c.dark_mode_default === '1' || c.dark_mode_default === 'true'; setDarkMode(srvDark);
       } else {setServerBg(c.default_background||null);const localBg = localStorage.getItem('custom_bg');const activeBg = localBg || c.default_background || null;applyBackgroundSource(activeBg, false);setLightTextColor(localStorage.getItem('custom_text_light')||c.text_color_light||DEFAULT_LIGHT_TEXT);setDarkTextColor(localStorage.getItem('custom_text_dark')||c.text_color_dark||DEFAULT_DARK_TEXT);const localOpStr = localStorage.getItem('overlayOpacity');const op = localOpStr != null ? Number(localOpStr) : (c.overlay_opacity != null ? Number(c.overlay_opacity) : 0.5);setOverlayOpacity(isNaN(op) ? 0.5 : op);const localDarkStr = localStorage.getItem('darkMode');if (localDarkStr != null) setDarkMode(localDarkStr === 'true');else {const srvDark = c.dark_mode_default === '1' || c.dark_mode_default === 'true';setDarkMode(srvDark);}}
     }catch(e){console.error(e)}finally{setLoading(false)}};
@@ -77,7 +83,8 @@ export default function App(){
           text_color_light:lightTextColor,
           text_color_dark:darkTextColor,
           overlay_opacity:overlayOpacity,
-          dark_mode_default:darkMode?'1':'0'
+          dark_mode_default:darkMode?'1':'0',
+          utc_offset:utcOffset
         };
         const currentBg = bgEmbed || bgVideo || bgImage;
         if(currentBg) p.default_background = currentBg;
@@ -109,6 +116,19 @@ export default function App(){
     }
   };
 
+  const handleSaveSettings = async (newConfig) => {
+    try {
+      if (newConfig.utcOffset !== utcOffset) {
+        setUtcOffset(newConfig.utcOffset);
+        await saveConfig('utc_offset', newConfig.utcOffset);
+      }
+      setShowSettingsModal(false);
+      alert('Đã lưu cấu hình!');
+    } catch (e) {
+      alert('Lỗi lưu cấu hình');
+    }
+  };
+
   const fetchInsights=async()=>{try{const r=await fetch('/api/insights');setInsightsData(await r.json());setShowInsightsModal(true)}catch{alert("Lỗi insights")}};
   const handleExportStats=()=>{window.open('/api/insights/export','_blank')};
   const handleExportSummary=()=>{window.open('/api/insights/export/summary','_blank')};
@@ -130,7 +150,32 @@ export default function App(){
 
   const uniqueParents=useMemo(()=>[...new Set(shortcuts.map(s=>s.parent_label).filter(Boolean))].sort(),[shortcuts]);
   const uniqueChildren=useMemo(()=>[...new Set(shortcuts.flatMap(s=>(s.child_label||'').split(',').map(t=>t.trim()).filter(Boolean)))].sort(),[shortcuts]);
-  const filteredShortcuts=useMemo(()=>{let r=shortcuts.filter(i=>{const t=searchTerm.trim().toLowerCase(),m=(!t||i.name.toLowerCase().includes(t))&&(!activeParentFilter||i.parent_label===activeParentFilter);if(!m)return false;if(activeChildFilter){const tags=(i.child_label||'').split(',').map(s=>s.trim());if(!tags.includes(activeChildFilter))return false}return true});r.sort((a,b)=>(b.favorite-a.favorite)||(sortBy==='alpha'?a.name.localeCompare(b.name):0));if(!clientOrder.length)return r;const idxMap=new Map(clientOrder.map((id,i)=>[id,i]));return[...r].sort((a,b)=>{const ia=idxMap.has(a.id)?idxMap.get(a.id):Infinity;const ib=idxMap.has(b.id)?idxMap.get(b.id):Infinity;if(ia!==ib)return ia-ib;return 0})},[shortcuts,searchTerm,activeParentFilter,activeChildFilter,sortBy,clientOrder]);
+  
+  // FIX: Sorting Logic now prioritizes explicit SortBy unless it is 'default'
+  const filteredShortcuts=useMemo(()=>{
+    let r=shortcuts.filter(i=>{const t=searchTerm.trim().toLowerCase(),m=(!t||i.name.toLowerCase().includes(t))&&(!activeParentFilter||i.parent_label===activeParentFilter);if(!m)return false;if(activeChildFilter){const tags=(i.child_label||'').split(',').map(s=>s.trim());if(!tags.includes(activeChildFilter))return false}return true});
+    
+    // First, always apply alpha or favorite sort as base
+    r.sort((a,b)=>(b.favorite-a.favorite)||(a.name.localeCompare(b.name)));
+    
+    // If we are in default mode (list), we TRY to use custom order
+    if(sortBy==='default' && clientOrder.length){
+        const idxMap=new Map(clientOrder.map((id,i)=>[id,i]));
+        return[...r].sort((a,b)=>{
+            const ia=idxMap.has(a.id)?idxMap.get(a.id):999999;
+            const ib=idxMap.has(b.id)?idxMap.get(b.id):999999;
+             // If both have custom order, use it. If not, fall back to comparison.
+             // Note: idx default is high so new items go to end
+            if(ia!==ib)return ia-ib;
+            return 0; 
+        });
+    } else if (sortBy === 'alpha') {
+        // Explicit Alpha Sort
+        return [...r].sort((a,b) => a.name.localeCompare(b.name));
+    }
+
+    return r; // Fallback
+},[shortcuts,searchTerm,activeParentFilter,activeChildFilter,sortBy,clientOrder]);
 
   useEffect(()=>{
     const calcItemsPerPage=()=>{if(!gridWrapperRef.current||!gridRef.current)return;const style=getComputedStyle(gridRef.current);const colCount=style.gridTemplateColumns.split(' ').length||1;const cardEl=gridRef.current.querySelector('[data-card]');const cardHeight=cardEl?cardEl.getBoundingClientRect().height:140;const wrapperRect=gridWrapperRef.current.getBoundingClientRect();const availableHeight=window.innerHeight-wrapperRect.top-80;const rows=Math.max(1,Math.floor(availableHeight/cardHeight));setItemsPerPage(Math.max(colCount*rows,colCount))};
@@ -162,17 +207,27 @@ export default function App(){
       {bgEmbed&&<iframe className="fixed inset-0 w-full h-full -z-20 pointer-events-none" src={bgEmbed+(bgEmbed.includes('?')?'&':'?')+'autoplay=1&mute=1&loop=1&controls=0&playsinline=1'+(bgEmbed.match(/\/embed\/([^?]+)/)?'&playlist='+bgEmbed.match(/\/embed\/([^?]+)/)[1]:'')} title="Background" frameBorder="0" allow="autoplay; fullscreen"/>}
       <div className="min-h-screen w-full transition-colors duration-300" style={{backgroundColor:(bgImage||bgVideo||bgEmbed)?(darkMode?`rgba(0,0,0,${overlayOpacity})`:`rgba(255,255,255,${overlayOpacity})`):''}}>
         <div className="sticky top-0 z-30 w-full flex flex-col pt-4 px-4 gap-2 pointer-events-none">
-          <div className="pointer-events-auto w-full max-w-2xl mx-auto flex items-center justify-center gap-3">
+          <div className="pointer-events-auto w-full max-w-2xl mx-auto flex items-center justify-center gap-3 relative">
+            {/* CLOCK DESKTOP: Left of Search */}
+            <div className="hidden sm:block absolute left-[-100px] top-1/2 -translate-y-1/2">
+                <Clock utcOffset={utcOffset} />
+            </div>
+
             <div className="flex-1 flex items-center gap-2 min-w-0">
                <div className="relative group w-full max-w-lg mx-auto transition-all"><Search className="absolute inset-y-0 left-0 pl-3 h-full w-7 opacity-50"/><input type="text" className={`block w-full pl-10 pr-3 py-2 border rounded-full text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-[#009FB8] ${inputClass} ${(bgImage||bgVideo||bgEmbed)?'bg-opacity-60 backdrop-blur-md':'bg-opacity-60'}`} style={{color:currentTextColor}} placeholder="Tìm kiếm..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)}/></div>
                <button onClick={()=>setShowFilterPanel(!showFilterPanel)} className={`p-2 rounded-full shadow-sm border ${inputClass} ${(bgImage||bgVideo||bgEmbed)?'bg-opacity-80':''}`}><Filter size={18}/></button>
-               <div className="hidden sm:flex items-center gap-1 bg-gray-200/50 dark:bg-gray-800/50 rounded-full p-1 backdrop-blur-sm"><button onClick={()=>setSortBy('default')} className={`p-1.5 rounded-full text-xs ${sortBy==='default'?'bg-white dark:bg-gray-700 shadow':'opacity-50'}`}><List size={14}/></button><button onClick={()=>setSortBy('alpha')} className={`p-1.5 rounded-full text-xs ${sortBy==='alpha'?'bg-white dark:bg-gray-700 shadow':'opacity-50'}`}>Aa</button></div>
+               <div className="flex items-center gap-1 bg-gray-200/50 dark:bg-gray-800/50 rounded-full p-1 backdrop-blur-sm"><button onClick={()=>setSortBy('default')} className={`p-1.5 rounded-full text-xs ${sortBy==='default'?'bg-white dark:bg-gray-700 shadow':'opacity-50'}`}><List size={14}/></button><button onClick={()=>setSortBy('alpha')} className={`p-1.5 rounded-full text-xs ${sortBy==='alpha'?'bg-white dark:bg-gray-700 shadow':'opacity-50'}`}>Aa</button></div>
             </div>
           </div>
           
-          {/* NEW PAGINATION IN HEADER */}
+          {/* PAGINATION & CLOCK MOBILE */}
           {totalPages>1&&(
-            <div className="pointer-events-auto w-full max-w-2xl mx-auto flex justify-center mb-1">
+            <div className="pointer-events-auto w-full max-w-2xl mx-auto flex justify-center mb-1 relative">
+               {/* CLOCK MOBILE: Left of Pagination */}
+               <div className="sm:hidden absolute left-0 top-1/2 -translate-y-1/2 ml-2">
+                 <Clock utcOffset={utcOffset} className="text-xs" />
+               </div>
+
               <div className="flex items-center gap-3 px-3 py-1.5 rounded-full bg-gray-100/80 dark:bg-gray-800/80 border border-gray-300/60 dark:border-gray-700/60 backdrop-blur-sm shadow-sm">
                 {totalPages>6&&(
                   isEditingPage?(
@@ -234,23 +289,31 @@ export default function App(){
 
         <div className="fixed bottom-6 right-6 z-50 pointer-events-auto opacity-0 hover:opacity-100 transition-opacity duration-300">
           <div className="group/menu flex items-center justify-end gap-2 p-2 rounded-full hover:bg-white/20 hover:backdrop-blur-md transition-all">
-            <div className="flex items-center gap-2">{(bgImage||bgVideo||bgEmbed)&&<div className="flex items-center gap-1 mr-2 bg-black/40 rounded-full px-2 py-1 backdrop-blur-sm"><span className="text-[10px] text-white/90 font-bold">BG</span><input type="range" min="0" max="0.9" step="0.1" value={overlayOpacity} onChange={e=>{const v=parseFloat(e.target.value);setOverlayOpacity(v);localStorage.setItem('overlayOpacity',v);if(isAdmin)saveConfig('overlay_opacity',v)}} className="w-16 h-1 accent-[#009FB8] cursor-pointer"/></div>}
+            <div className="flex items-center gap-2">
+            {(bgImage||bgVideo||bgEmbed)&&<div className="flex items-center gap-1 mr-2 bg-black/40 rounded-full px-2 py-1 backdrop-blur-sm"><span className="text-[10px] text-white/90 font-bold">BG</span><input type="range" min="0" max="0.9" step="0.1" value={overlayOpacity} onChange={e=>{const v=parseFloat(e.target.value);setOverlayOpacity(v);localStorage.setItem('overlayOpacity',v);if(isAdmin)saveConfig('overlay_opacity',v)}} className="w-16 h-1 accent-[#009FB8] cursor-pointer"/></div>}
             <button onClick={()=>setDarkMode(!darkMode)} className={`p-2 rounded-full border shadow-sm ${inputClass} ${(bgImage||bgVideo||bgEmbed)?'bg-opacity-80':''}`}>{darkMode?<Sun size={18} className="text-yellow-400"/>:<Moon size={18} className="text-gray-600"/>}</button>
             <div className={`flex items-center gap-1 p-1 rounded-full border shadow-lg ${inputClass} bg-opacity-80 backdrop-blur`}>
+              {/* RE-ORDERED: Color Pickers FIRST */}
               <div className="flex flex-col gap-0.5 mr-1 border-r border-gray-400/30 pr-1">
                 <div className="flex items-center gap-1" title="Text Light"><input type="color" value={lightTextColor} onChange={e=>handleTextColorChange('light',e.target.value)} className="w-4 h-4 p-0 border-none bg-transparent cursor-pointer"/></div>
                 <div className="flex items-center gap-1" title="Text Dark"><input type="color" value={darkTextColor} onChange={e=>handleTextColorChange('dark',e.target.value)} className="w-4 h-4 p-0 border-none bg-transparent cursor-pointer"/></div>
               </div>
+              
+              {/* Then Media Controls */}
               <button onClick={()=>bgInputRef.current?.click()} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"><ImageIcon size={16}/></button><input type="file" ref={bgInputRef} className="hidden" accept="image/*,video/*" onChange={handleBgUpload}/>
-              <div className="hidden sm:flex items-center gap-1 ml-1"><input type="text" placeholder="Link ảnh/GIF (https://...)" className={`px-2 py-1 text-[11px] rounded-full border max-w-[160px] ${inputClass}`} value={bgUrlInput} onChange={e=>setBgUrlInput(e.target.value)}/><button type="button" onClick={applyBgUrl} className="px-2 py-1 text-[11px] rounded-full border border-gray-400/50 hover:bg-gray-200 dark:hover:bg-gray-700">Set</button></div>
+              <div className="hidden sm:flex items-center gap-1 ml-1"><input type="text" placeholder="Link ảnh/GIF" className={`px-2 py-1 text-[11px] rounded-full border max-w-[120px] ${inputClass}`} value={bgUrlInput} onChange={e=>setBgUrlInput(e.target.value)}/><button type="button" onClick={applyBgUrl} className="px-2 py-1 text-[11px] rounded-full border border-gray-400/50 hover:bg-gray-200 dark:hover:bg-gray-700">Set</button></div>
+              
               {isAdmin&&(<>
                 <button onClick={fetchInsights} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-orange-500"><ChartIcon size={16}/></button>
                 <button onClick={handleForceSync} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-purple-500" title="Đồng bộ Client"><RefreshCw size={16}/></button>
+                <div className="w-px h-4 bg-gray-300 mx-1"></div>
                 <button onClick={handleExportData} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-blue-500"><Download size={16}/></button>
                 <button onClick={()=>importInputRef.current?.click()} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-green-500"><FileUp size={16}/></button>
                 <input type="file" ref={importInputRef} className="hidden" accept=".json" onChange={handleImportData}/>
                 <button onClick={handleClearMedia} className="p-1.5 hover:bg-red-100 dark:hover:bg-red-900 rounded-full text-red-500" title="Xóa nền"><Trash2 size={16}/></button>
                 <div className="w-px h-4 bg-gray-300 mx-1"></div>
+                {/* NEW SETTINGS BUTTON */}
+                <button onClick={()=>setShowSettingsModal(true)} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"><Settings size={16}/></button>
                 <button onClick={()=>setIsAdmin(false)} className="p-1.5 hover:bg-red-100 dark:hover:bg-red-900 rounded-full text-red-500"><LogOut size={16}/></button>
               </>)}
               {!isAdmin&&(<>
@@ -279,6 +342,15 @@ export default function App(){
           setCreds={setLoginCreds}
           onLogin={handleLogin}
           error={loginError}
+          modalClass={modalClass}
+          inputClass={inputClass}
+        />
+
+        <SettingsModal
+          isOpen={showSettingsModal}
+          onClose={() => setShowSettingsModal(false)}
+          config={{ utcOffset }}
+          onSave={handleSaveSettings}
           modalClass={modalClass}
           inputClass={inputClass}
         />
