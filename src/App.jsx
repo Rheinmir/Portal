@@ -158,7 +158,82 @@ export default function App(){
   const handleExportSummary=()=>{window.open('/api/insights/export/summary','_blank')};
 
   const resetForm=()=>setFormData({id:null,name:'',url:'',icon_url:'',parent_label:'',parent_color:COLOR_PRESETS[0],child_label:'',child_color:COLOR_PRESETS[1],isLocal:false});
-  const handleSubmit=async e=>{e.preventDefault();if(!formData.name.trim()||!formData.url.trim())return alert('Thiếu tên/URL');let iconToSave=formData.icon_url;if(!iconToSave){try{const urlObj=new URL(formData.url);iconToSave=`https://www.google.com/s2/favicons?domain=${urlObj.hostname}&sz=128`}catch(e){}}const payload={...formData,icon_url:iconToSave};const isLocal=!isAdmin||formData.isLocal;if(isLocal){const l=JSON.parse(localStorage.getItem('local_shortcuts')||'[]');let nl;if(formData.id&&formData.isLocal)nl=l.map(s=>s.id===formData.id?{...payload,id:formData.id}:s);else nl=[{...payload,id:Date.now(),clicks:0,favorite:0},...l];localStorage.setItem('local_shortcuts',JSON.stringify(nl));fetchData();setShowAddModal(false);resetForm()}else{try{const r=await fetch(formData.id?`/api/shortcuts/${formData.id}`:'/api/shortcuts',{method:formData.id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});if(r.ok){await fetchData();setShowAddModal(false);resetForm()}}catch{alert('Lỗi Server')}}};
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!formData.name.trim() || !formData.url.trim()) return alert('Thiếu tên/URL');
+
+    // 1. Prepare Data
+    let iconToSave = formData.icon_url;
+    if (!iconToSave) {
+      try {
+        const urlObj = new URL(formData.url);
+        iconToSave = `https://www.google.com/s2/favicons?domain=${urlObj.hostname}&sz=128`;
+      } catch (e) {}
+    }
+
+    const payload = { ...formData, icon_url: iconToSave };
+    const isEdit = !!formData.id;
+    
+    // 2. Optimistic Update
+    const previousShortcuts = [...shortcuts];
+    const tempId = isEdit ? formData.id : Date.now(); // Temp ID for new item
+    const optimisticItem = {
+      ...payload,
+      id: tempId,
+      clicks: isEdit ? (shortcuts.find(s => s.id === formData.id)?.clicks || 0) : 0,
+      favorite: isEdit ? (shortcuts.find(s => s.id === formData.id)?.favorite || 0) : 0,
+    };
+
+    // Update Local State Immediately
+    if (isEdit) {
+      setShortcuts(prev => prev.map(s => s.id === formData.id ? optimisticItem : s));
+    } else {
+      setShortcuts(prev => [optimisticItem, ...prev]);
+    }
+
+    // Close Modal Immediately
+    setShowAddModal(false);
+    resetForm();
+
+    // 3. Background Sync
+    const isLocal = !isAdmin || formData.isLocal;
+    
+    try {
+      if (isLocal) {
+        // Local Storage Sync
+        const l = JSON.parse(localStorage.getItem('local_shortcuts') || '[]');
+        let nl;
+        if (isEdit && formData.isLocal) {
+          nl = l.map(s => s.id === formData.id ? optimisticItem : s);
+        } else {
+          nl = [optimisticItem, ...l];
+        }
+        localStorage.setItem('local_shortcuts', JSON.stringify(nl));
+        // No fetch needed for local, just update state (already done)
+      } else {
+        // Server Sync
+        const method = isEdit ? 'PUT' : 'POST';
+        const url = isEdit ? `/api/shortcuts/${formData.id}` : '/api/shortcuts';
+        
+        const res = await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) throw new Error("Sync failed");
+
+        // Silent Refetch to get real ID (crucial for new items)
+        // We wait a bit or just call it.
+        // For new items, if we don't get the real ID, subsequent edits/deletes will fail.
+        await fetchData(); 
+      }
+    } catch (err) {
+      // 4. Rollback on Error
+      setShortcuts(previousShortcuts);
+      alert("Lỗi lưu dữ liệu: " + err.message);
+    }
+  };
   const handleDelete=async id=>{if(!confirm('Xóa?'))return;const t=shortcuts.find(s=>s.id===id);if(t&&t.isLocal){const l=JSON.parse(localStorage.getItem('local_shortcuts')||'[]');localStorage.setItem('local_shortcuts',JSON.stringify(l.filter(s=>s.id!==id)));fetchData()}else if(isAdmin){await fetch(`/api/shortcuts/${id}`,{method:'DELETE'});fetchData()}};
   const handleToggleFavorite = async (id, e) => {
     e.stopPropagation();
