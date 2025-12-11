@@ -36,6 +36,7 @@ export default function App(){
   const [confirmState, setConfirmState] = useState({ isOpen: false, message: '', onConfirm: null });
   const [searchFile, setSearchFile] = useState(null);
   const [searchPreview, setSearchPreview] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
   const searchFileInputRef = useRef(null);
 
   const [currentPage,setCurrentPage]=useState(0),[touchStartX,setTouchStartX]=useState(null),[itemsPerPage,setItemsPerPage]=useState(DEFAULT_ITEMS_PER_PAGE);
@@ -59,6 +60,18 @@ export default function App(){
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showColorPicker]);
+
+  useEffect(()=>{
+    const handleWindowDragEnter = (e) => {
+      e.preventDefault();
+      // Only trigger if dragging files
+      if (e.dataTransfer.types && e.dataTransfer.types.includes('Files')) {
+        setIsDragging(true);
+      }
+    };
+    window.addEventListener('dragenter', handleWindowDragEnter);
+    return () => window.removeEventListener('dragenter', handleWindowDragEnter);
+  }, []);
 
   useEffect(()=>{if(darkMode)document.documentElement.classList.add('dark');else document.documentElement.classList.remove('dark');localStorage.setItem('darkMode',darkMode)},[darkMode]);
   useEffect(()=>{const r=localStorage.getItem('shortcut_order_'+tenant);setClientOrder(r?JSON.parse(r):[])},[tenant]);
@@ -225,6 +238,7 @@ export default function App(){
 
   const handleGlobalDrop = (e) => {
     e.preventDefault();
+    setIsDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
         const file = e.dataTransfer.files[0];
         if (file.type.startsWith('image/')) {
@@ -477,6 +491,29 @@ export default function App(){
 
   return (
     <div className={`min-h-screen font-light transition-all duration-300 bg-cover bg-center bg-no-repeat bg-fixed ${bgClass}`} style={{backgroundImage:bgImage?`url(${bgImage})`:'none',color:currentTextColor}}>
+      {/* Global Drag Overlay */}
+      {isDragging && (
+        <div 
+            className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center animate-in fade-in duration-200"
+            onDragOver={(e)=>{e.preventDefault(); e.dataTransfer.dropEffect = 'copy';}}
+            onDragLeave={(e)=>{
+                e.preventDefault();
+                // Avoid flickering when going over children by checking relatedTarget (mostly works)
+                // Or just simple close.
+                if (e.currentTarget.contains(e.relatedTarget)) return;
+                setIsDragging(false);
+            }}
+            onDrop={handleGlobalDrop}
+        >
+            <div className="w-4/5 h-4/5 border-4 border-dashed border-white/30 rounded-3xl flex flex-col items-center justify-center gap-4 bg-white/5 pointer-events-none">
+                <div className="bg-white/10 p-8 rounded-full animate-bounce">
+                    <Camera size={64} className="text-white"/>
+                </div>
+                <h2 className="text-3xl font-bold text-white tracking-wide">{t('drop_to_search') || "Drop Image to Search"}</h2>
+            </div>
+        </div>
+      )}
+
       {bgVideo&&<video className="fixed inset-0 w-full h-full object-cover -z-10" src={bgVideo} autoPlay loop muted playsInline/>}
       {bgEmbed&&<iframe className="fixed inset-0 w-full h-full -z-20 pointer-events-none" src={bgEmbed+(bgEmbed.includes('?')?'&':'?')+'autoplay=1&mute=1&loop=1&controls=0&playsinline=1'+(bgEmbed.match(/\/embed\/([^?]+)/)?'&playlist='+bgEmbed.match(/\/embed\/([^?]+)/)[1]:'')} title="Background" frameBorder="0" allow="autoplay; fullscreen"/>}
       <div className="min-h-screen w-full transition-colors duration-300" style={{backgroundColor:(bgImage||bgVideo||bgEmbed)?(darkMode?`rgba(0,0,0,${overlayOpacity})`:`rgba(255,255,255,${overlayOpacity})`):''}}>
@@ -591,9 +628,6 @@ export default function App(){
             onTouchStart={e=>setTouchStartX(e.touches[0].clientX)} 
             onTouchMove={e=>e.preventDefault()} 
             onTouchEnd={e=>{if(touchStartX===null)return;const d=e.changedTouches[0].clientX-touchStartX;if(Math.abs(d)>50){if(d<0)goNext();else goPrev()}setTouchStartX(null)}}
-            onDragOver={e => { e.preventDefault(); e.currentTarget.style.boxShadow = "inset 0 0 0 2px #009FB8"; }}
-            onDragLeave={e => { e.preventDefault(); e.currentTarget.style.boxShadow = "none"; }}
-            onDrop={e => { e.currentTarget.style.boxShadow = "none"; handleGlobalDrop(e); }}
         >
           <div ref={gridRef} className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-4 justify-items-center">
             {pagedShortcuts.map(i=>(
