@@ -504,13 +504,17 @@ export default function App(){
         </div>
 
         <div className="fixed bottom-6 right-6 z-50 pointer-events-auto opacity-0 hover:opacity-100 transition-opacity duration-300 max-w-[calc(100vw-3rem)]">
-          <div className="group/menu flex flex-wrap items-center justify-end gap-2 p-2 rounded-3xl hover:bg-white/20 hover:backdrop-blur-md transition-all">
-            {(bgImage||bgVideo||bgEmbed)&&<div className="flex items-center gap-1 mr-2 bg-black/40 rounded-full px-2 py-1 backdrop-blur-sm"><span className="text-[10px] text-white/90 font-bold">BG</span><input type="range" min="0" max="0.9" step="0.1" value={overlayOpacity} onChange={e=>{const v=parseFloat(e.target.value);setOverlayOpacity(v);localStorage.setItem('overlayOpacity',v);if(isAdmin)saveConfig('overlay_opacity',v)}} className="w-16 h-1 accent-[#009FB8] cursor-pointer"/></div>}
-            <div className="flex flex-wrap items-center gap-2 justify-end">
-             <button onClick={()=>setDarkMode(!darkMode)} className={`p-2 rounded-full border shadow-sm ${inputClass} ${(bgImage||bgVideo||bgEmbed)?'bg-opacity-80':''}`}>{darkMode?<Sun size={18} className="text-yellow-400"/>:<Moon size={18} className="text-gray-600"/>}</button>
-             <div className={`flex flex-wrap items-center gap-1 p-1 rounded-3xl border shadow-lg ${inputClass} bg-opacity-80 backdrop-blur relative justify-end`}>
-              
-              {/* NEW PALETTE POPOVER TRIGGER */}
+          <div className={`group/menu flex flex-wrap items-center justify-end gap-2 p-2 rounded-3xl border shadow-lg ${inputClass} bg-opacity-90 backdrop-blur-md transition-all`}>
+            
+            {/* BG Control */}
+            {(bgImage||bgVideo||bgEmbed)&&<div className="flex items-center gap-1 bg-black/40 rounded-full px-2 py-1 backdrop-blur-sm"><span className="text-[10px] text-white/90 font-bold">BG</span><input type="range" min="0" max="0.9" step="0.1" value={overlayOpacity} onChange={e=>{const v=parseFloat(e.target.value);setOverlayOpacity(v);localStorage.setItem('overlayOpacity',v);if(isAdmin)saveConfig('overlay_opacity',v)}} className="w-16 h-1 accent-[#009FB8] cursor-pointer"/></div>}
+            
+            {/* Dark Mode */}
+            <button onClick={()=>setDarkMode(!darkMode)} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full">{darkMode?<Sun size={18} className="text-yellow-400"/>:<Moon size={18} className="text-gray-600"/>}</button>
+            
+            <div className="w-px h-4 bg-gray-300 mx-1"></div>
+
+              {/* Text Color Picker */}
               <div className="relative z-50">
                 <button 
                   onClick={() => setShowColorPicker(!showColorPicker)}
@@ -530,8 +534,6 @@ export default function App(){
                              <input type="color" value={darkTextColor} onChange={e=>handleTextColorChange('dark',e.target.value)} className="w-6 h-6 p-0 border-none bg-transparent cursor-pointer rounded-full overflow-hidden"/>
                              <span className="text-[10px] font-medium opacity-70">{t('text_dark')}</span>
                         </div>
-                        {/* Little triangle arrow */}
-// This is a placeholder. I need to see the file content first to know what to replace.
                     </div>
                 )}
               </div>
@@ -543,40 +545,38 @@ export default function App(){
               <div className="hidden sm:flex items-center gap-1 ml-1"><input type="text" placeholder={t('image_gif_link')} className={`px-2 py-1 text-[11px] rounded-full border max-w-[120px] ${inputClass}`} value={bgUrlInput} onChange={e=>setBgUrlInput(e.target.value)}/><button type="button" onClick={applyBgUrl} className="px-2 py-1 text-[11px] rounded-full border border-gray-400/50 hover:bg-gray-200 dark:hover:bg-gray-700">{t('set')}</button></div>
               
               {/* Language Switcher */}
-              {/* Language Switcher Dropdown */}
-              <div className="relative group/lang mr-2">
+              <div className="relative group/lang ml-1">
                  <select 
                    value={lang} 
                    onChange={(e)=>setLang(e.target.value)} 
-                   className="appearance-none bg-black/5 dark:bg-white/10 text-xs font-bold uppercase rounded-xl px-3 py-1.5 pr-6 cursor-pointer outline-none hover:bg-black/10 dark:hover:bg-white/20 transition-all text-gray-700 dark:text-gray-300"
+                   className={`appearance-none bg-black/5 dark:bg-white/10 text-xs font-bold uppercase rounded-xl px-2 py-1.5 pr-5 cursor-pointer outline-none hover:bg-black/10 dark:hover:bg-white/20 transition-all text-gray-700 dark:text-gray-300 border-none`}
                  >
                    {['vn','en','de','kz','ka','ru'].map(l=>(
                      <option key={l} value={l} className="text-black">{l.toUpperCase()}</option>
                    ))}
                  </select>
-                 <div className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-50">
-                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+                 <div className="absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none opacity-50">
+                   <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>
                  </div>
               </div>
 
               {isAdmin&&(<>
+                 <div className="w-px h-4 bg-gray-300 mx-1"></div>
                 <button onClick={fetchInsights} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-orange-500"><ChartIcon size={16}/></button>
                 <button onClick={handleForceSync} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-purple-500" title="Đồng bộ Client"><RefreshCw size={16}/></button>
-                <div className="w-px h-4 bg-gray-300 mx-1"></div>
                 <button onClick={handleExportData} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-blue-500"><Download size={16}/></button>
                 <button onClick={()=>importInputRef.current?.click()} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-green-500"><FileUp size={16}/></button>
                 <input type="file" ref={importInputRef} className="hidden" accept=".json" onChange={handleImportData}/>
-                <button onClick={handleClearMedia} className="p-1.5 hover:bg-red-100 dark:hover:bg-red-900 rounded-full text-red-500" title="Xóa nền"><Trash2 size={16}/></button>
                 <div className="w-px h-4 bg-gray-300 mx-1"></div>
                 <button onClick={()=>setShowSettingsModal(true)} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full" title={t('app_config')}><Settings size={16}/></button>
                 <button onClick={()=>setIsAdmin(false)} className="p-1.5 hover:bg-red-100 dark:hover:bg-red-900 rounded-full text-red-500"><LogOut size={16}/></button>
               </>)}
               {!isAdmin&&(<>
+                <div className="w-px h-4 bg-gray-300 mx-1"></div>
                 <button onClick={handleClearMedia} className="p-2 hover:bg-red-100 dark:hover:bg-red-900 rounded-full text-red-500" title="Xóa nền"><Trash2 size={16}/></button>
                 {localStorage.getItem('custom_bg')&&<button onClick={handleResetBg} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-orange-500"><RotateCcw size={16}/></button>}
                 <button onClick={()=>setShowLoginModal(true)} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full" title={t('admin_login')}><Key size={18}/></button>
               </>)}
-            </div></div>
           </div>
         </div>
         
