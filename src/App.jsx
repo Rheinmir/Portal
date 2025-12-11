@@ -238,10 +238,10 @@ export default function App(){
 
   const handleSearchSubmit = () => {
     if (searchFile) {
-        // Google Image Search via Form Submit
+        // Google Image Search via Form Submit (Lens)
         const form = document.createElement('form');
         form.method = 'POST';
-        form.action = 'https://google.com/searchbyimage/upload';
+        form.action = 'https://lens.google.com/upload?ep=ccm';
         form.enctype = 'multipart/form-data';
         form.target = '_blank';
         
