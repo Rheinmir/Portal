@@ -1,9 +1,13 @@
 import React,{useState,useEffect,useRef,useMemo}from'react';import{Save,Trash2,Plus,Search,Activity,Copy,Check,Settings,LogOut,X,Filter,Tag,Upload,Download,FileUp,Pencil,Star,Moon,Sun,LayoutGrid,List,Image as ImageIcon,RotateCcw,BarChart as ChartIcon,Palette,Type,RefreshCw}from'lucide-react';
-import ShortcutCard from './components/ShortcutCard';
-import InsightsModal from './components/InsightsModal';
-import FilterPanel from './components/FilterPanel';
-import Clock from './components/Clock';
-import { LoginModal, AddEditModal, SettingsModal } from './components/AdminModals';
+const ShortcutCard = React.lazy(() => import('./components/ShortcutCard'));
+const InsightsModal = React.lazy(() => import('./components/InsightsModal'));
+const FilterPanel = React.lazy(() => import('./components/FilterPanel'));
+const Clock = React.lazy(() => import('./components/Clock'));
+
+// Lazy load named exports
+const LoginModal = React.lazy(() => import('./components/AdminModals').then(module => ({ default: module.LoginModal })));
+const AddEditModal = React.lazy(() => import('./components/AdminModals').then(module => ({ default: module.AddEditModal })));
+const SettingsModal = React.lazy(() => import('./components/AdminModals').then(module => ({ default: module.SettingsModal })));
 
 const COLOR_PRESETS=['#0A1A2F','#009FB8','#6D28D9','#BE123C','#059669','#C2410C','#475569'];const DEFAULT_LIGHT_TEXT='#2C2C2C',DEFAULT_DARK_TEXT='#E2E8F0';
 const getContrastYIQ=(hex)=>{if(!hex)return'#fff';const h=hex.replace('#','');const r=parseInt(h.substr(0,2),16),g=parseInt(h.substr(2,2),16),b=parseInt(h.substr(4,2),16);return(((r*299)+(g*587)+(b*114))/1000)>=128?'#000':'#fff'};
@@ -22,7 +26,7 @@ function normalizeYoutube(url) {
 export default function App(){
   const[shortcuts,setShortcuts]=useState([]),[labelColors,setLabelColors]=useState({}),[loading,setLoading]=useState(true),[darkMode,setDarkMode]=useState(()=>localStorage.getItem('darkMode')==='true'),[bgImage,setBgImage]=useState(null),[serverBg,setServerBg]=useState(null),[bgVideo,setBgVideo]=useState(null),[bgEmbed,setBgEmbed]=useState(null),[overlayOpacity,setOverlayOpacity]=useState(()=>{const r=localStorage.getItem('overlayOpacity');const n=parseFloat(r);return isNaN(n)?0.5:n});
   const[lightTextColor,setLightTextColor]=useState(()=>localStorage.getItem('custom_text_light')||DEFAULT_LIGHT_TEXT),[darkTextColor,setDarkTextColor]=useState(()=>localStorage.getItem('custom_text_dark')||DEFAULT_DARK_TEXT);
-  const[formData,setFormData]=useState({id:null,name:'',url:'',icon_url:'',parent_label:'',parent_color:COLOR_PRESETS[0],child_label:'',child_color:COLOR_PRESETS[1],isLocal:false}),[searchTerm,setSearchTerm]=useState(''),[showFilterPanel,setShowFilterPanel]=useState(false),[activeParentFilter,setActiveParentFilter]=useState(null),[activeChildFilter,setActiveChildFilter]=useState(null),[isAdmin,setIsAdmin]=useState(false),[showLoginModal,setShowLoginModal]=useState(false),[showAddModal,setShowAddModal]=useState(false),[showInsightsModal,setShowInsightsModal]=useState(false),[showSettingsModal,setShowSettingsModal]=useState(false),[insightsData,setInsightsData]=useState(null),[loginCreds,setLoginCreds]=useState({username:'',password:''}),[loginError,setLoginError]=useState(''),[sortBy,setSortBy]=useState('default'),[tenant,setTenant]=useState(()=>normalizeTenant(localStorage.getItem('tenant'))),
+  const[formData,setFormData]=useState({id:null,name:'',url:'',icon_url:'',parent_label:'',parent_color:COLOR_PRESETS[0],child_label:'',child_color:COLOR_PRESETS[1],isLocal:false}),[searchTerm,setSearchTerm]=useState(''),[debouncedSearchTerm,setDebouncedSearchTerm]=useState(''),[showFilterPanel,setShowFilterPanel]=useState(false),[activeParentFilter,setActiveParentFilter]=useState(null),[activeChildFilter,setActiveChildFilter]=useState(null),[isAdmin,setIsAdmin]=useState(false),[showLoginModal,setShowLoginModal]=useState(false),[showAddModal,setShowAddModal]=useState(false),[showInsightsModal,setShowInsightsModal]=useState(false),[showSettingsModal,setShowSettingsModal]=useState(false),[insightsData,setInsightsData]=useState(null),[loginCreds,setLoginCreds]=useState({username:'',password:''}),[loginError,setLoginError]=useState(''),[sortBy,setSortBy]=useState('default'),[tenant,setTenant]=useState(()=>normalizeTenant(localStorage.getItem('tenant'))),
   [bgUrlInput,setBgUrlInput]=useState(''),[isEditingPage,setIsEditingPage]=useState(false),[pageInput,setPageInput]=useState('');
   const [utcOffset, setUtcOffset] = useState(7);
   const [showColorPicker, setShowColorPicker] = useState(false);
@@ -51,7 +55,15 @@ export default function App(){
 
   useEffect(()=>{if(darkMode)document.documentElement.classList.add('dark');else document.documentElement.classList.remove('dark');localStorage.setItem('darkMode',darkMode)},[darkMode]);
   useEffect(()=>{const r=localStorage.getItem('shortcut_order_'+tenant);setClientOrder(r?JSON.parse(r):[])},[tenant]);
-  useEffect(()=>{setCurrentPage(0)},[searchTerm,activeParentFilter,activeChildFilter,sortBy,tenant]);
+  useEffect(()=>{setCurrentPage(0)},[debouncedSearchTerm,activeParentFilter,activeChildFilter,sortBy,tenant]);
+
+  // Debounce search term
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
   const applyBackgroundSource=(src,isFromServer=false)=>{
     if(isFromServer)setServerBg(src);
@@ -165,7 +177,7 @@ export default function App(){
   
   // FIX: Sorting Logic now prioritizes explicit SortBy unless it is 'default'
   const filteredShortcuts=useMemo(()=>{
-    let r=shortcuts.filter(i=>{const t=searchTerm.trim().toLowerCase(),m=(!t||i.name.toLowerCase().includes(t))&&(!activeParentFilter||i.parent_label===activeParentFilter);if(!m)return false;if(activeChildFilter){const tags=(i.child_label||'').split(',').map(s=>s.trim());if(!tags.includes(activeChildFilter))return false}return true});
+    let r=shortcuts.filter(i=>{const t=debouncedSearchTerm.trim().toLowerCase(),m=(!t||i.name.toLowerCase().includes(t))&&(!activeParentFilter||i.parent_label===activeParentFilter);if(!m)return false;if(activeChildFilter){const tags=(i.child_label||'').split(',').map(s=>s.trim());if(!tags.includes(activeChildFilter))return false}return true});
     
     // First, always apply alpha or favorite sort as base
     r.sort((a,b)=>(b.favorite-a.favorite)||(a.name.localeCompare(b.name)));
@@ -187,7 +199,7 @@ export default function App(){
     }
 
     return r; // Fallback
-},[shortcuts,searchTerm,activeParentFilter,activeChildFilter,sortBy,clientOrder]);
+},[shortcuts,debouncedSearchTerm,activeParentFilter,activeChildFilter,sortBy,clientOrder]);
 
   useEffect(()=>{
     const calcItemsPerPage=()=>{if(!gridWrapperRef.current||!gridRef.current)return;const style=getComputedStyle(gridRef.current);const colCount=style.gridTemplateColumns.split(' ').length||1;const cardEl=gridRef.current.querySelector('[data-card]');const cardHeight=cardEl?cardEl.getBoundingClientRect().height:140;const wrapperRect=gridWrapperRef.current.getBoundingClientRect();const availableHeight=window.innerHeight-wrapperRect.top-80;const rows=Math.max(1,Math.floor(availableHeight/cardHeight));setItemsPerPage(Math.max(colCount*rows,colCount))};
@@ -219,17 +231,24 @@ export default function App(){
       {bgEmbed&&<iframe className="fixed inset-0 w-full h-full -z-20 pointer-events-none" src={bgEmbed+(bgEmbed.includes('?')?'&':'?')+'autoplay=1&mute=1&loop=1&controls=0&playsinline=1'+(bgEmbed.match(/\/embed\/([^?]+)/)?'&playlist='+bgEmbed.match(/\/embed\/([^?]+)/)[1]:'')} title="Background" frameBorder="0" allow="autoplay; fullscreen"/>}
       <div className="min-h-screen w-full transition-colors duration-300" style={{backgroundColor:(bgImage||bgVideo||bgEmbed)?(darkMode?`rgba(0,0,0,${overlayOpacity})`:`rgba(255,255,255,${overlayOpacity})`):''}}>
         <div className="sticky top-0 z-30 w-full flex flex-col pt-4 px-4 gap-2 pointer-events-none">
-          <div className="pointer-events-auto w-full max-w-2xl mx-auto flex items-center justify-center gap-3 relative">
-            {/* CLOCK DESKTOP: Left of Search */}
-            <div className="hidden sm:block absolute left-[-150px] top-1/2 -translate-y-1/2">
+          <div className="pointer-events-auto w-full max-w-7xl mx-auto flex items-center justify-between gap-3 relative">
+            {/* CLOCK DESKTOP: Now responsive, on the left */}
+            <div className="hidden sm:block min-w-[120px]">
+              <React.Suspense fallback={<div className="h-8 w-24 bg-gray-200/20 rounded animate-pulse"/>}>
                 <Clock utcOffset={utcOffset} />
+              </React.Suspense>
             </div>
 
-            <div className="flex-1 flex items-center gap-2 min-w-0">
-               <div className="relative group w-full max-w-lg mx-auto transition-all"><Search className="absolute inset-y-0 left-0 pl-3 h-full w-7 opacity-50"/><input type="text" className={`block w-full pl-10 pr-3 py-2 border rounded-full text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-[#009FB8] ${inputClass} ${(bgImage||bgVideo||bgEmbed)?'bg-opacity-60 backdrop-blur-md':'bg-opacity-60'}`} style={{color:currentTextColor}} placeholder="Tìm kiếm..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)}/></div>
-               <button onClick={()=>setShowFilterPanel(!showFilterPanel)} className={`p-2 rounded-full shadow-sm border ${inputClass} ${(bgImage||bgVideo||bgEmbed)?'bg-opacity-80':''}`}><Filter size={18}/></button>
+            <div className="flex-1 flex items-center justify-center gap-2 max-w-2xl">
+               <div className="relative group w-full transition-all"><Search className="absolute inset-y-0 left-0 pl-3 h-full w-7 opacity-50"/><input type="text" className={`block w-full pl-10 pr-3 py-2 border rounded-full text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-[#009FB8] ${inputClass} ${(bgImage||bgVideo||bgEmbed)?'bg-opacity-60 backdrop-blur-md':'bg-opacity-60'}`} style={{color:currentTextColor}} placeholder="Tìm kiếm..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)}/></div>
+               <React.Suspense fallback={<div className="w-9 h-9 bg-gray-200/50 rounded-full"/>}>
+                 <button onClick={()=>setShowFilterPanel(!showFilterPanel)} className={`p-2 rounded-full shadow-sm border ${inputClass} ${(bgImage||bgVideo||bgEmbed)?'bg-opacity-80':''}`}><Filter size={18}/></button>
+               </React.Suspense>
                <div className="flex items-center gap-1 bg-gray-200/50 dark:bg-gray-800/50 rounded-full p-1 backdrop-blur-sm"><button onClick={()=>setSortBy('default')} className={`p-1.5 rounded-full text-xs ${sortBy==='default'?'bg-white dark:bg-gray-700 shadow':'opacity-50'}`}><List size={14}/></button><button onClick={()=>setSortBy('alpha')} className={`p-1.5 rounded-full text-xs ${sortBy==='alpha'?'bg-white dark:bg-gray-700 shadow':'opacity-50'}`}>Aa</button></div>
             </div>
+
+            {/* Spacer for potential right-side elements or keeping it centered */}
+             <div className="hidden sm:block min-w-[120px]"></div>
           </div>
           
           {/* PAGINATION & CLOCK MOBILE */}
@@ -237,7 +256,9 @@ export default function App(){
             <div className="pointer-events-auto w-full max-w-2xl mx-auto flex justify-center mb-1 relative">
                {/* CLOCK MOBILE: Left of Pagination */}
                <div className="sm:hidden absolute left-6 top-1/2 -translate-y-1/2">
+                <React.Suspense fallback={null}>
                  <Clock utcOffset={utcOffset} className="text-sm" />
+                </React.Suspense>
                </div>
 
               <div className="flex items-center gap-3 px-3 py-1.5 rounded-full bg-gray-100/80 dark:bg-gray-800/80 border border-gray-300/60 dark:border-gray-700/60 backdrop-blur-sm shadow-sm">
@@ -255,26 +276,28 @@ export default function App(){
             </div>
           )}
 
-          <FilterPanel 
-            isOpen={showFilterPanel}
-            activeParentFilter={activeParentFilter}
-            setActiveParentFilter={setActiveParentFilter}
-            activeChildFilter={activeChildFilter}
-            setActiveChildFilter={setActiveChildFilter}
-            uniqueParents={uniqueParents}
-            uniqueChildren={uniqueChildren}
-            labelColors={labelColors}
-            modalClass={modalClass}
-            getContrastYIQ={getContrastYIQ}
-          />
+          <React.Suspense fallback={null}>
+            <FilterPanel 
+              isOpen={showFilterPanel}
+              activeParentFilter={activeParentFilter}
+              setActiveParentFilter={setActiveParentFilter}
+              activeChildFilter={activeChildFilter}
+              setActiveChildFilter={setActiveChildFilter}
+              uniqueParents={uniqueParents}
+              uniqueChildren={uniqueChildren}
+              labelColors={labelColors}
+              modalClass={modalClass}
+              getContrastYIQ={getContrastYIQ}
+            />
+          </React.Suspense>
         </div>
         
         {/* GRID */}
         <div ref={gridWrapperRef} className="max-w-7xl mx-auto px-6 pb-32 pt-8 min-h-[60vh]" style={{overflow:"hidden"}} onWheel={e=>{e.preventDefault();if(e.deltaY>0||e.deltaX>0)goNext();else goPrev()}} onTouchStart={e=>setTouchStartX(e.touches[0].clientX)} onTouchMove={e=>e.preventDefault()} onTouchEnd={e=>{if(touchStartX===null)return;const d=e.changedTouches[0].clientX-touchStartX;if(Math.abs(d)>50){if(d<0)goNext();else goPrev()}setTouchStartX(null)}}>
           <div ref={gridRef} className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-4 justify-items-center">
             {pagedShortcuts.map(i=>(
+              <React.Suspense key={i.id} fallback={<div className="w-full h-32 rounded-xl bg-gray-100 dark:bg-gray-800 animate-pulse"/>}>
               <ShortcutCard 
-                key={i.id}
                 item={i}
                 isAdmin={isAdmin}
                 handleDragStart={handleDragStart}
@@ -292,6 +315,7 @@ export default function App(){
                 darkMode={darkMode}
                 getContrastYIQ={getContrastYIQ}
               />
+              </React.Suspense>
             ))}
             {isLastPage&&(
               <div className="flex flex-col items-center w-full max-w-[100px] cursor-pointer group" onClick={()=>{resetForm();setShowAddModal(true)}}><div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all mb-2 backdrop-blur-sm bg-white/10 dark:bg-black/10 hover:bg-emerald-500/10`}><Plus size={24} className="opacity-50 font-light"/></div><span className="text-xs font-light opacity-50">Thêm App</span></div>
@@ -360,6 +384,7 @@ export default function App(){
           </div>
         </div>
         
+        <React.Suspense fallback={null}>
         <InsightsModal 
           isOpen={showInsightsModal} 
           onClose={() => setShowInsightsModal(false)}
@@ -368,7 +393,9 @@ export default function App(){
           onExportSummary={handleExportSummary}
           modalClass={modalClass}
         />
+        </React.Suspense>
 
+        <React.Suspense fallback={null}>
         <LoginModal 
           isOpen={showLoginModal}
           onClose={() => setShowLoginModal(false)}
@@ -379,7 +406,9 @@ export default function App(){
           modalClass={modalClass}
           inputClass={inputClass}
         />
+        </React.Suspense>
 
+        <React.Suspense fallback={null}>
         <SettingsModal
           isOpen={showSettingsModal}
           onClose={() => setShowSettingsModal(false)}
@@ -388,7 +417,9 @@ export default function App(){
           modalClass={modalClass}
           inputClass={inputClass}
         />
+        </React.Suspense>
 
+        <React.Suspense fallback={null}>
         <AddEditModal 
           isOpen={showAddModal}
           onClose={() => setShowAddModal(false)}
@@ -402,6 +433,7 @@ export default function App(){
           darkMode={darkMode}
           isEdit={!!formData.id}
         />
+        </React.Suspense>
       </div>
     </div>
   );

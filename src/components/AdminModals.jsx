@@ -14,7 +14,7 @@ export function LoginModal({
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className={`rounded-2xl shadow-2xl w-full max-w-xs p-6 border ${modalClass}`}>
+      <div className={`rounded-2xl shadow-2xl w-[95%] max-w-xs p-6 border max-h-[90vh] overflow-y-auto ${modalClass}`}>
         <div className="flex justify-between items-center mb-6">
           <h3 className="font-bold">Admin</h3>
           <button onClick={onClose}>
@@ -62,7 +62,7 @@ export function AddEditModal({
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className={`rounded-2xl shadow-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto border ${modalClass}`}>
+      <div className={`rounded-2xl shadow-2xl w-[95%] max-w-md p-6 max-h-[90vh] overflow-y-auto border ${modalClass}`}>
         <div className="flex justify-between items-center mb-4">
           <h3 className="font-bold">{isEdit ? 'Sửa' : 'Thêm'} App</h3>
           <button onClick={onClose}>
@@ -186,7 +186,7 @@ export function SettingsModal({ isOpen, onClose, config, onSave, modalClass, inp
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className={`w-full max-w-sm p-6 rounded-2xl shadow-xl transition-all ${modalClass}`} onClick={e => e.stopPropagation()}>
+      <div className={`w-[95%] max-w-sm p-6 rounded-2xl shadow-xl transition-all max-h-[90vh] overflow-y-auto ${modalClass}`} onClick={e => e.stopPropagation()}>
         <h2 className="text-xl font-semibold mb-4">Cài đặt hệ thống</h2>
         <form onSubmit={handleSave} className="flex flex-col gap-4">
           <div>
