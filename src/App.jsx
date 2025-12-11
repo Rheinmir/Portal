@@ -393,7 +393,7 @@ export default function App(){
   const cardClass=darkMode?'bg-gray-800 border-gray-700 hover:border-blue-500':'bg-white border-[#D8D8D8] hover:border-[#009FB8]';
   const inputClass=darkMode?'bg-gray-800 border-gray-700':'bg-white border-[#D8D8D8]',modalClass=darkMode?'bg-gray-900 border-gray-700':'bg-white border-[#D8D8D8]';
   const isLastPage=currentPage===totalPages-1;
-  if(loading)return<div className={`min-h-screen flex items-center justify-center ${bgClass}`}><Grip size={48} className="animate-pulse opacity-50"/></div>;
+  if(loading)return<div className={`min-h-screen flex items-center justify-center ${bgClass}`}><span className="loader"></span></div>;
 
   // New Pagination Helpers
   const maxDots=6;
