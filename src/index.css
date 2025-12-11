@@ -1,6 +1,62 @@
 @import url('https://fonts.googleapis.com/css2?family=Lexend+Deca:wght@100..900&display=swap');
-@tailwind base; @tailwind components; @tailwind utilities; body { margin: 0; min-height: 100vh; } .dark { color-scheme: dark; }
+@import url('https://fonts.googleapis.com/css2?family=Lexend+Deca:wght@200;300;400;500&display=swap');
 
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: 'Lexend Deca', sans-serif;
+  font-weight: 300; /* Light/Thin feel */
+}
+
+.dark { color-scheme: dark; }
+
+/* Custom Scrollbar for cleaner look */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent; 
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.5); 
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(156, 163, 175, 0.8); 
+}
+
+/* Custom Loader */
+.loader {
+  width: 30px;
+  aspect-ratio: 1;
+  --c: no-repeat radial-gradient(farthest-side, #3B82F6 92%, #0000);
+  background: 
+    var(--c) 50%  0, 
+    var(--c) 50%  100%, 
+    var(--c) 100% 50%, 
+    var(--c) 0    50%;
+  background-size: 8px 8px;
+  animation: l18 1s infinite;
+  transform: translate(-30px, 30px); /* Center manual fix */
+}
+@keyframes l18 {to{transform: rotate(.5turn) translate(-30px, 30px)}}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+.animate-in {
+  animation: fadeIn 0.2s ease-out forwards;
+}
+
+/* Original loader styles, if still needed, otherwise remove */
+/*
 .loader {
   width: 16px;
   height: 16px;
@@ -15,6 +71,7 @@
   box-sizing: border-box;
   animation: animloader 2s ease infinite;
 }
+*/
 .loader::after,
 .loader::before {
   content: '';  

@@ -1,4 +1,5 @@
-import React,{useState,useEffect,useRef,useMemo}from'react';import{Save,Trash2,Plus,Search,Activity,Copy,Check,Settings,LogOut,X,Filter,Tag,Upload,Download,FileUp,Pencil,Star,Moon,Sun,LayoutGrid,List,Image as ImageIcon,RotateCcw,BarChart as ChartIcon,Palette,Type,RefreshCw}from'lucide-react';
+import React,{useState,useEffect,useRef,useMemo}from'react';import { Trash2, Plus, Grip, Search, Moon, Sun, Settings, Key, BarChart as ChartIcon, Image as ImageIcon, X, Palette, Type, Link, Upload, RefreshCw, Filter, Tag, Download, FileUp, Pencil, Star, LayoutGrid, List, RotateCcw, LogOut } from 'lucide-react';
+import { useLanguage } from './contexts/LanguageContext';
 const ShortcutCard = React.lazy(() => import('./components/ShortcutCard'));
 const InsightsModal = React.lazy(() => import('./components/InsightsModal'));
 const FilterPanel = React.lazy(() => import('./components/FilterPanel'));
@@ -24,6 +25,7 @@ function normalizeYoutube(url) {
 }
 
 export default function App(){
+  const { t, lang, setLang } = useLanguage();
   const[shortcuts,setShortcuts]=useState([]),[labelColors,setLabelColors]=useState({}),[loading,setLoading]=useState(true),[darkMode,setDarkMode]=useState(()=>localStorage.getItem('darkMode')==='true'),[bgImage,setBgImage]=useState(null),[serverBg,setServerBg]=useState(null),[bgVideo,setBgVideo]=useState(null),[bgEmbed,setBgEmbed]=useState(null),[overlayOpacity,setOverlayOpacity]=useState(()=>{const r=localStorage.getItem('overlayOpacity');const n=parseFloat(r);return isNaN(n)?0.5:n});
   const[lightTextColor,setLightTextColor]=useState(()=>localStorage.getItem('custom_text_light')||DEFAULT_LIGHT_TEXT),[darkTextColor,setDarkTextColor]=useState(()=>localStorage.getItem('custom_text_dark')||DEFAULT_DARK_TEXT);
   const[formData,setFormData]=useState({id:null,name:'',url:'',icon_url:'',parent_label:'',parent_color:COLOR_PRESETS[0],child_label:'',child_color:COLOR_PRESETS[1],isLocal:false}),[searchTerm,setSearchTerm]=useState(''),[debouncedSearchTerm,setDebouncedSearchTerm]=useState(''),[showFilterPanel,setShowFilterPanel]=useState(false),[activeParentFilter,setActiveParentFilter]=useState(null),[activeChildFilter,setActiveChildFilter]=useState(null),[isAdmin,setIsAdmin]=useState(false),[showLoginModal,setShowLoginModal]=useState(false),[showAddModal,setShowAddModal]=useState(false),[showInsightsModal,setShowInsightsModal]=useState(false),[showSettingsModal,setShowSettingsModal]=useState(false),[insightsData,setInsightsData]=useState(null),[loginCreds,setLoginCreds]=useState({username:'',password:''}),[loginError,setLoginError]=useState(''),[sortBy,setSortBy]=useState('default'),[tenant,setTenant]=useState(()=>normalizeTenant(localStorage.getItem('tenant'))),
@@ -84,24 +86,24 @@ export default function App(){
   const handleTextColorChange=(m,c)=>{if(m==='light'){setLightTextColor(c);localStorage.setItem('custom_text_light',c);if(isAdmin)saveConfig('text_color_light',c)}else{setDarkTextColor(c);localStorage.setItem('custom_text_dark',c);if(isAdmin)saveConfig('text_color_dark',c)}};
   const handleBgUpload=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{const b=ev.target.result;
     if(f.type.startsWith('video/')){setBgVideo(b);setBgImage(null);setBgEmbed(null);}else{setBgImage(b);setBgVideo(null);setBgEmbed(null);}
-    if(isAdmin){if(confirm("Lưu mặc định server (sẽ thay thế nền/video cũ)?")){saveConfig('default_background',b);alert("Đã lưu server!")}else localStorage.setItem('custom_bg',b)}else localStorage.setItem('custom_bg',b)
+    if(isAdmin){if(confirm(t('confirm_save_server_bg'))){saveConfig('default_background',b);alert(t('saved_to_server'))}else localStorage.setItem('custom_bg',b)}else localStorage.setItem('custom_bg',b)
   };r.readAsDataURL(f)};
   
   const applyBgUrl=()=>{
     const url = normalizeYoutube(bgUrlInput.trim());
     if(!url)return;
     applyBackgroundSource(url);
-    if(isAdmin&&confirm("Lưu mặc định server?")){
-      saveConfig('default_background',url);alert("Đã lưu server!")
+    if(isAdmin&&confirm(t('confirm_save_server_bg'))){
+      saveConfig('default_background',url);alert(t('saved_to_server'))
     }else localStorage.setItem('custom_bg',url)
   };
   
-  const handleResetBg=()=>{localStorage.removeItem('custom_bg');applyBackgroundSource(serverBg);alert("Đã reset BG")};
-  const handleClearMedia=async()=>{if(!confirm("Xóa TẤT CẢ nền ảnh/video đã tải lên?\n- Máy bạn sẽ mất nền\n- Nếu là admin: xóa luôn nền server"))return;localStorage.removeItem('custom_bg');setBgImage(null);setBgVideo(null);setBgEmbed(null);if(isAdmin){try{await saveConfig('default_background','');alert('Đã xóa nền server và máy bạn.')}catch{alert('Lỗi xóa server.')}}else{alert('Đã xóa nền máy bạn.')}};
+  const handleResetBg=()=>{localStorage.removeItem('custom_bg');applyBackgroundSource(serverBg);alert(t('bg_reset'))};
+  const handleClearMedia=async()=>{if(!confirm(t('confirm_clear_media')))return;localStorage.removeItem('custom_bg');setBgImage(null);setBgVideo(null);setBgEmbed(null);if(isAdmin){try{await saveConfig('default_background','');alert(t('server_and_local_bg_cleared'))}catch{alert(t('error_clearing_server_bg'))}}else{alert(t('local_bg_cleared'))}};
 
   const handleForceSync=async()=>{
     if(!isAdmin)return;
-    if(confirm("Cập nhật cấu hình lên Server và ép Client tải lại?")){
+    if(confirm(t('confirm_force_sync'))){
       try{
         const p={
           text_color_light:lightTextColor,
@@ -131,11 +133,11 @@ export default function App(){
           }
           const order=serverList.map(s=>s.id);
           await fetch('/api/reorder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tenant,order})});
-          alert("Đã đồng bộ!");
+          alert(t('sync_successful'));
           fetchData()
-        }else alert("Lỗi: "+d.error);
+        }else alert(t('error') + ": "+d.error);
       }catch{
-        alert("Lỗi sync")
+        alert(t('error_sync'))
       }
     }
   };
@@ -147,20 +149,20 @@ export default function App(){
         await saveConfig('utc_offset', newConfig.utcOffset);
       }
       setShowSettingsModal(false);
-      alert('Đã lưu cấu hình!');
+      alert(t('settings_saved'));
     } catch (e) {
-      alert('Lỗi lưu cấu hình');
+      alert(t('error_saving_settings'));
     }
   };
 
-  const fetchInsights=async()=>{try{const r=await fetch('/api/insights');setInsightsData(await r.json());setShowInsightsModal(true)}catch{alert("Lỗi insights")}};
+  const fetchInsights=async()=>{try{const r=await fetch('/api/insights');setInsightsData(await r.json());setShowInsightsModal(true)}catch{alert(t('error_insights'))}};
   const handleExportStats=()=>{window.open('/api/insights/export','_blank')};
   const handleExportSummary=()=>{window.open('/api/insights/export/summary','_blank')};
 
   const resetForm=()=>setFormData({id:null,name:'',url:'',icon_url:'',parent_label:'',parent_color:COLOR_PRESETS[0],child_label:'',child_color:COLOR_PRESETS[1],isLocal:false});
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.name.trim() || !formData.url.trim()) return alert('Thiếu tên/URL');
+    if (!formData.name.trim() || !formData.url.trim()) return alert(t('error_server')); // Using generic error for simplicity or add specific key
 
     // 1. Prepare Data
     let iconToSave = formData.icon_url;
@@ -231,11 +233,11 @@ export default function App(){
     } catch (err) {
       // 4. Rollback on Error
       setShortcuts(previousShortcuts);
-      alert("Lỗi lưu dữ liệu: " + err.message);
+      alert(t('error_saving_data') + ": " + err.message);
     }
   };
   const handleDelete = async (id) => {
-    if (!confirm('Xóa?')) return;
+    if (!confirm(t('confirm_delete'))) return;
     
     // 1. Optimistic Update
     const previousShortcuts = [...shortcuts];
@@ -256,7 +258,7 @@ export default function App(){
     } catch (err) {
       // Rollback
       setShortcuts(previousShortcuts);
-      alert("Lỗi xóa: " + err.message);
+      alert(t('error_deleting') + ": " + err.message);
     }
   };
   const handleToggleFavorite = async (id, e) => {
@@ -282,15 +284,15 @@ export default function App(){
     } catch (err) {
       // 4. Rollback on Error
       setShortcuts(previousShortcuts);
-      alert("Lỗi đồng bộ favorite: " + err.message);
+      alert(t('error_syncing_favorite') + ": " + err.message);
     }
   };
   const handleLinkClick=(id,u)=>{const t=shortcuts.find(s=>s.id===id);if(!t?.isLocal)fetch(`/api/click/${id}`,{method:'POST'});window.open(u,'_blank')};
   const handleEdit=(i,e)=>{e.stopPropagation();setFormData({...i,icon_url:i.icon_url||''});setShowAddModal(true)};
-  const handleLogin=e=>{e.preventDefault();if(loginCreds.username==='admin'&&loginCreds.password==='miniappadmin'){setIsAdmin(true);setShowLoginModal(false)}else setLoginError('Sai thông tin')};
+  const handleLogin=e=>{e.preventDefault();if(loginCreds.username==='admin'&&loginCreds.password==='miniappadmin'){setIsAdmin(true);setShowLoginModal(false)}else setLoginError(t('invalid_credentials'))};
   const handleImageUpload=e=>{const f=e.target.files[0];if(f){const r=new FileReader();r.onload=ev=>setFormData(p=>({...p,icon_url:ev.target.result}));r.readAsDataURL(f)}};
   const handleExportData=()=>{const d='data:text/json;charset=utf-8,'+encodeURIComponent(JSON.stringify({version:2,timestamp:new Date().toISOString(),shortcuts:shortcuts.filter(s=>!s.isLocal),labels:labelColors}));const a=document.createElement('a');a.href=d;a.download='backup.json';document.body.appendChild(a);a.click();a.remove()};
-  const handleImportData=e=>{const f=e.target.files[0];if(f){const r=new FileReader();r.onload=async ev=>{await fetch('/api/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(JSON.parse(ev.target.result))});alert("Import OK!");fetchData()};r.readAsText(f)}};
+  const handleImportData=e=>{const f=e.target.files[0];if(f){const r=new FileReader();r.onload=async ev=>{await fetch('/api/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(JSON.parse(ev.target.result))});alert(t('import_successful'));fetchData()};r.readAsText(f)}};
   const handleDragStart=(e,id)=>{setDraggingId(id);e.dataTransfer.effectAllowed='move';const iconEl=e.currentTarget.querySelector('[data-icon]');if(iconEl&&e.dataTransfer.setDragImage){const rect=iconEl.getBoundingClientRect();const clone=iconEl.cloneNode(true);clone.style.width=rect.width+'px';clone.style.height=rect.height+'px';clone.style.borderRadius='16px';clone.style.overflow='hidden';clone.style.position='absolute';clone.style.top='-1000px';clone.style.left='-1000px';clone.style.zIndex='9999';document.body.appendChild(clone);e.dataTransfer.setDragImage(clone,rect.width/2,rect.height/2);setTimeout(()=>{document.body.removeChild(clone)},0)}};
   const handleDragOver=e=>{e.preventDefault();e.dataTransfer.dropEffect='move'};
   const handleDrop=(e,targetId)=>{e.preventDefault();if(!draggingId||draggingId===targetId)return;setClientOrder(prev=>{const baseIds=filteredShortcuts.map(s=>s.id);let current=prev&&prev.length?prev.filter(id=>baseIds.includes(id)):baseIds.slice();baseIds.forEach(id=>{if(!current.includes(id))current.push(id)});const from=current.indexOf(draggingId);const to=current.indexOf(targetId);if(from===-1||to===-1)return prev;const next=current.slice();next.splice(from,1);next.splice(to,0,draggingId);localStorage.setItem('shortcut_order_'+tenant,JSON.stringify(next));return next});setDraggingId(null)};
@@ -364,7 +366,7 @@ export default function App(){
             </div>
 
             <div className="flex-1 flex items-center justify-center gap-2 max-w-2xl">
-               <div className="relative group w-full transition-all"><Search className="absolute inset-y-0 left-0 pl-3 h-full w-7 opacity-50"/><input type="text" className={`block w-full pl-10 pr-3 py-2 border rounded-full text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-[#009FB8] ${inputClass} ${(bgImage||bgVideo||bgEmbed)?'bg-opacity-60 backdrop-blur-md':'bg-opacity-60'}`} style={{color:currentTextColor}} placeholder="Tìm kiếm..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)}/></div>
+               <div className="relative group w-full transition-all"><Search className="absolute inset-y-0 left-0 pl-3 h-full w-7 opacity-50"/><input type="text" className={`block w-full pl-10 pr-3 py-2 border rounded-full text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-[#009FB8] ${inputClass} ${(bgImage||bgVideo||bgEmbed)?'bg-opacity-60 backdrop-blur-md':'bg-opacity-60'}`} style={{color:currentTextColor}} placeholder={t('search_placeholder')} value={searchTerm} onChange={e=>setSearchTerm(e.target.value)}/></div>
                <React.Suspense fallback={<div className="w-9 h-9 bg-gray-200/50 rounded-full"/>}>
                  <button onClick={()=>setShowFilterPanel(!showFilterPanel)} className={`p-2 rounded-full shadow-sm border ${inputClass} ${(bgImage||bgVideo||bgEmbed)?'bg-opacity-80':''}`}><Filter size={18}/></button>
                </React.Suspense>
@@ -390,7 +392,7 @@ export default function App(){
                   isEditingPage?(
                     <input autoFocus className="w-12 bg-transparent border-b border-blue-500 text-center text-[11px] outline-none" value={pageInput} onChange={e=>setPageInput(e.target.value)} onBlur={()=>{setIsEditingPage(false);setPageInput('')}} onKeyDown={e=>{if(e.key==='Enter'){const p=parseInt(pageInput)-1;if(!isNaN(p)&&p>=0&&p<totalPages)setCurrentPage(p);setIsEditingPage(false)}}}/>
                   ):(
-                    <span className="text-[11px] opacity-70 hover:opacity-100 cursor-pointer font-medium min-w-[60px] text-center" onClick={()=>{setIsEditingPage(true);setPageInput(String(currentPage+1))}} title="Nhập số trang">Trang {currentPage+1}/{totalPages}</span>
+                    <span className="text-[11px] opacity-70 hover:opacity-100 cursor-pointer font-medium min-w-[60px] text-center" onClick={()=>{setIsEditingPage(true);setPageInput(String(currentPage+1))}} title={t('enter_page_number')}>{t('page')} {currentPage+1}/{totalPages}</span>
                   )
                 )}
                 <div className="flex items-center gap-1.5">
@@ -442,7 +444,7 @@ export default function App(){
               </React.Suspense>
             ))}
             {isLastPage&&(
-              <div className="flex flex-col items-center w-full max-w-[100px] cursor-pointer group" onClick={()=>{resetForm();setShowAddModal(true)}}><div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all mb-2 backdrop-blur-sm bg-white/10 dark:bg-black/10 hover:bg-emerald-500/10`}><Plus size={24} className="opacity-50 font-light"/></div><span className="text-xs font-light opacity-50">Thêm App</span></div>
+              <div className="flex flex-col items-center w-full max-w-[100px] cursor-pointer group" onClick={()=>{resetForm();setShowAddModal(true)}}><div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all mb-2 backdrop-blur-sm bg-white/10 dark:bg-black/10 hover:bg-emerald-500/10`}><Plus size={24} className="opacity-50 font-light"/></div><span className="text-xs font-light opacity-50">{t('add_app')}</span></div>
             )}
           </div>
         </div>
@@ -459,7 +461,7 @@ export default function App(){
                 <button 
                   onClick={() => setShowColorPicker(!showColorPicker)}
                   className={`color-picker-trigger p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full ${showColorPicker ? 'bg-blue-100 dark:bg-blue-900 text-blue-500' : ''}`} 
-                  title="Màu chữ"
+                  title={t('text_color')}
                 >
                   <Palette size={16}/>
                 </button>
@@ -468,11 +470,11 @@ export default function App(){
                     <div className="color-picker-popover absolute bottom-full mb-3 left-1/2 -translate-x-1/2 p-3 rounded-xl bg-white dark:bg-gray-800 shadow-xl border border-gray-200 dark:border-gray-700 min-w-[120px] flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-2">
                         <div className="grid grid-cols-[auto_1fr] gap-2 items-center">
                             <input type="color" value={lightTextColor} onChange={e=>handleTextColorChange('light',e.target.value)} className="w-6 h-6 p-0 border-none bg-transparent cursor-pointer rounded-full overflow-hidden"/>
-                            <span className="text-[10px] font-medium opacity-70">Text Light</span>
+                            <span className="text-[10px] font-medium opacity-70">{t('text_light')}</span>
                         </div>
                         <div className="grid grid-cols-[auto_1fr] gap-2 items-center">
                              <input type="color" value={darkTextColor} onChange={e=>handleTextColorChange('dark',e.target.value)} className="w-6 h-6 p-0 border-none bg-transparent cursor-pointer rounded-full overflow-hidden"/>
-                             <span className="text-[10px] font-medium opacity-70">Text Dark</span>
+                             <span className="text-[10px] font-medium opacity-70">{t('text_dark')}</span>
                         </div>
                         {/* Little triangle arrow */}
                         <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-white dark:border-t-gray-800"></div>
@@ -484,7 +486,7 @@ export default function App(){
 
               {/* Media Controls */}
               <button onClick={()=>bgInputRef.current?.click()} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"><ImageIcon size={16}/></button><input type="file" ref={bgInputRef} className="hidden" accept="image/*,video/*" onChange={handleBgUpload}/>
-              <div className="hidden sm:flex items-center gap-1 ml-1"><input type="text" placeholder="Link ảnh/GIF" className={`px-2 py-1 text-[11px] rounded-full border max-w-[120px] ${inputClass}`} value={bgUrlInput} onChange={e=>setBgUrlInput(e.target.value)}/><button type="button" onClick={applyBgUrl} className="px-2 py-1 text-[11px] rounded-full border border-gray-400/50 hover:bg-gray-200 dark:hover:bg-gray-700">Set</button></div>
+              <div className="hidden sm:flex items-center gap-1 ml-1"><input type="text" placeholder={t('image_gif_link')} className={`px-2 py-1 text-[11px] rounded-full border max-w-[120px] ${inputClass}`} value={bgUrlInput} onChange={e=>setBgUrlInput(e.target.value)}/><button type="button" onClick={applyBgUrl} className="px-2 py-1 text-[11px] rounded-full border border-gray-400/50 hover:bg-gray-200 dark:hover:bg-gray-700">{t('set')}</button></div>
               
               {isAdmin&&(<>
                 <button onClick={fetchInsights} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-orange-500"><ChartIcon size={16}/></button>
