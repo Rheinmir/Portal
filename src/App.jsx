@@ -1,4 +1,4 @@
-import React,{useState,useEffect,useRef,useMemo}from'react';import { Trash2, Plus, Grip, Search, Moon, Sun, Settings, Key, BarChart as ChartIcon, Image as ImageIcon, X, Palette, Type, Link, Upload, RefreshCw, Filter, Tag, Download, FileUp, Pencil, Star, LayoutGrid, List, RotateCcw, LogOut } from 'lucide-react';
+import React,{useState,useEffect,useRef,useMemo}from'react';import { Trash2, Plus, Grip, Search, Moon, Sun, Settings, Key, BarChart as ChartIcon, Image as ImageIcon, X, Palette, Type, Link, Upload, RefreshCw, Filter, Tag, Download, FileUp, Pencil, Star, LayoutGrid, List, RotateCcw, LogOut, Camera } from 'lucide-react';
 import { useLanguage } from './contexts/LanguageContext';
 const ShortcutCard = React.lazy(() => import('./components/ShortcutCard'));
 const InsightsModal = React.lazy(() => import('./components/InsightsModal'));
@@ -34,6 +34,9 @@ export default function App(){
   const [utcOffset, setUtcOffset] = useState(7);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [confirmState, setConfirmState] = useState({ isOpen: false, message: '', onConfirm: null });
+  const [searchFile, setSearchFile] = useState(null);
+  const [searchPreview, setSearchPreview] = useState(null);
+  const searchFileInputRef = useRef(null);
 
   const [currentPage,setCurrentPage]=useState(0),[touchStartX,setTouchStartX]=useState(null),[itemsPerPage,setItemsPerPage]=useState(DEFAULT_ITEMS_PER_PAGE);
   const [clientOrder,setClientOrder]=useState(()=>{const r=localStorage.getItem('shortcut_order_'+tenant);return r?JSON.parse(r):[]}),[draggingId,setDraggingId]=useState(null);
@@ -192,15 +195,82 @@ export default function App(){
 
   const handleSaveSettings = async (newConfig) => {
     try {
-      if (newConfig.utcOffset !== utcOffset) {
-        setUtcOffset(newConfig.utcOffset);
-        await saveConfig('utc_offset', newConfig.utcOffset);
+      if(newConfig.utcOffset !== undefined) {
+          localStorage.setItem('utc_offset', newConfig.utcOffset);
+          setUtcOffset(newConfig.utcOffset);
+          if(isAdmin) saveConfig('utc_offset', newConfig.utcOffset);
       }
-      setShowSettingsModal(false);
       alert(t('settings_saved'));
-    } catch (e) {
+      setShowSettingsModal(false);
+    } catch (err) {
       alert(t('error_saving_settings'));
     }
+  };
+
+  const handleSearchImageSelect = (e) => {
+    const file = e.target.files[0];
+    if (file && file.type.startsWith('image/')) {
+        setSearchFile(file);
+        const reader = new FileReader();
+        reader.onload = (ev) => setSearchPreview(ev.target.result);
+        reader.readAsDataURL(file);
+    }
+  };
+
+  const handleGlobalDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'copy';
+  };
+
+  const handleGlobalDrop = (e) => {
+    e.preventDefault();
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+        const file = e.dataTransfer.files[0];
+        if (file.type.startsWith('image/')) {
+            setSearchFile(file);
+            const reader = new FileReader();
+            reader.onload = (ev) => setSearchPreview(ev.target.result);
+            reader.readAsDataURL(file);
+        }
+    }
+  };
+
+  const handleSearchSubmit = () => {
+    if (searchFile) {
+        // Google Image Search via Form Submit
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = 'https://google.com/searchbyimage/upload';
+        form.enctype = 'multipart/form-data';
+        form.target = '_blank';
+        
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.name = 'encoded_image';
+        
+        const dataTransfer = new DataTransfer();
+        dataTransfer.items.add(searchFile);
+        fileInput.files = dataTransfer.files;
+        
+        form.appendChild(fileInput);
+        document.body.appendChild(form);
+        form.submit();
+        document.body.removeChild(form);
+        
+        // Optional: clear after search?
+        // setSearchFile(null); 
+        // setSearchPreview(null);
+    } else if (searchTerm.trim()) {
+        window.open('https://www.google.com/search?q=' + encodeURIComponent(searchTerm), '_blank');
+    }
+  };
+  
+  const clearSearchImage = (e) => {
+    e.stopPropagation();
+    setSearchFile(null);
+    setSearchPreview(null);
+    if(searchFileInputRef.current) searchFileInputRef.current.value='';
   };
 
   const fetchInsights=async()=>{try{const r=await fetch('/api/insights');setInsightsData(await r.json());setShowInsightsModal(true)}catch{alert(t('error_insights'))}};
@@ -420,7 +490,47 @@ export default function App(){
             </div>
 
             <div className="flex-1 flex items-center justify-center gap-2 max-w-2xl">
-               <div className="relative group w-full transition-all"><Search className="absolute inset-y-0 left-0 pl-3 h-full w-7 opacity-50"/><input type="text" className={`block w-full pl-10 pr-3 py-2 border rounded-full text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-[#009FB8] ${inputClass} ${(bgImage||bgVideo||bgEmbed)?'bg-opacity-60 backdrop-blur-md':'bg-opacity-60'}`} style={{color:currentTextColor}} placeholder={t('search_placeholder')} value={searchTerm} onChange={e=>setSearchTerm(e.target.value)}/></div>
+
+               <div className="relative group/search w-full transition-all flex items-center bg-white dark:bg-gray-800 rounded-full border shadow-sm focus-within:ring-2 focus-within:ring-[#009FB8] overflow-hidden" style={{borderColor: darkMode?'#374151':'#D8D8D8'}}>
+                  <button 
+                    onClick={handleSearchSubmit} 
+                    className={`pl-3 pr-2 h-full opacity-50 hover:opacity-100 hover:text-[#009FB8] transition-colors cursor-pointer z-10`}
+                  >
+                     <Search size={18}/>
+                  </button>
+                  
+                  {searchPreview && (
+                    <div className="flex items-center gap-1 pl-1">
+                        <div className="relative group/preview">
+                            <img src={searchPreview} className="h-6 w-6 rounded object-cover border"/>
+                            <button onClick={clearSearchImage} className="absolute -top-1 -right-1 bg-gray-500 text-white rounded-full p-0.5 opacity-0 group-hover/preview:opacity-100 transition-opacity"><X size={8}/></button>
+                        </div>
+                    </div>
+                  )}
+
+                  <input 
+                    type="text" 
+                    className={`block w-full px-2 py-2 text-sm focus:outline-none bg-transparent ${(bgImage||bgVideo||bgEmbed)?'bg-opacity-60 backdrop-blur-md':''}`} 
+                    style={{color:currentTextColor}} 
+                    placeholder={searchPreview ? "Google Image Search..." : t('search_placeholder')} 
+                    value={searchTerm} 
+                    onChange={e=>setSearchTerm(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleSearchSubmit()}
+                  />
+
+                  {/* Image Upload Trigger */}
+                  <div className={`pr-1 opacity-0 group-hover/search:opacity-100 transition-opacity flex items-center ${searchPreview ? 'opacity-100' : ''}`}>
+                      <button 
+                        onClick={() => searchFileInputRef.current?.click()} 
+                        className="p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500"
+                        title="Search by Image"
+                      >
+                          <Camera size={16} />
+                      </button>
+                      <input type="file" ref={searchFileInputRef} className="hidden" accept="image/*" onChange={handleSearchImageSelect} />
+                  </div>
+
+               </div>
                <React.Suspense fallback={<div className="w-9 h-9 bg-gray-200/50 rounded-full"/>}>
                  <button onClick={()=>setShowFilterPanel(!showFilterPanel)} className={`p-2 rounded-full shadow-sm border ${inputClass} ${(bgImage||bgVideo||bgEmbed)?'bg-opacity-80':''}`}><Filter size={18}/></button>
                </React.Suspense>
@@ -473,7 +583,18 @@ export default function App(){
         </div>
         
         {/* GRID */}
-        <div ref={gridWrapperRef} className="max-w-7xl mx-auto px-6 pb-32 pt-8 min-h-[60vh]" style={{overflow:"hidden"}} onWheel={e=>{e.preventDefault();if(e.deltaY>0||e.deltaX>0)goNext();else goPrev()}} onTouchStart={e=>setTouchStartX(e.touches[0].clientX)} onTouchMove={e=>e.preventDefault()} onTouchEnd={e=>{if(touchStartX===null)return;const d=e.changedTouches[0].clientX-touchStartX;if(Math.abs(d)>50){if(d<0)goNext();else goPrev()}setTouchStartX(null)}}>
+        <div 
+            ref={gridWrapperRef} 
+            className="max-w-7xl mx-auto px-6 pb-32 pt-8 min-h-[60vh] outline-none" 
+            style={{overflow:"hidden"}} 
+            onWheel={e=>{e.preventDefault();if(e.deltaY>0||e.deltaX>0)goNext();else goPrev()}} 
+            onTouchStart={e=>setTouchStartX(e.touches[0].clientX)} 
+            onTouchMove={e=>e.preventDefault()} 
+            onTouchEnd={e=>{if(touchStartX===null)return;const d=e.changedTouches[0].clientX-touchStartX;if(Math.abs(d)>50){if(d<0)goNext();else goPrev()}setTouchStartX(null)}}
+            onDragOver={e => { e.preventDefault(); e.currentTarget.style.boxShadow = "inset 0 0 0 2px #009FB8"; }}
+            onDragLeave={e => { e.preventDefault(); e.currentTarget.style.boxShadow = "none"; }}
+            onDrop={e => { e.currentTarget.style.boxShadow = "none"; handleGlobalDrop(e); }}
+        >
           <div ref={gridRef} className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-4 justify-items-center">
             {pagedShortcuts.map(i=>(
               <React.Suspense key={i.id} fallback={<div className="w-full h-32 rounded-xl bg-gray-100 dark:bg-gray-800 animate-pulse"/>}>

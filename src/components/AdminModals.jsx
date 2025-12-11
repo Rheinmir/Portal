@@ -118,6 +118,23 @@ export function AddEditModal({
               <div className="flex gap-4 items-start">
                 <div 
                   onClick={() => fileInputRef.current?.click()}
+                  onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = '#3B82F6'; e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.1)'; }}
+                  onDragLeave={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = ''; e.currentTarget.style.backgroundColor = ''; }}
+                  onDrop={(e) => { 
+                    e.preventDefault(); 
+                    e.currentTarget.style.borderColor = ''; 
+                    e.currentTarget.style.backgroundColor = '';
+                    if(e.dataTransfer.files && e.dataTransfer.files[0]) {
+                        const file = e.dataTransfer.files[0];
+                        if(file.type.startsWith('image/')) {
+                            const reader = new FileReader();
+                            reader.onload = (ev) => {
+                                setFormData(prev => ({ ...prev, icon_url: ev.target.result }));
+                            };
+                            reader.readAsDataURL(file);
+                        }
+                    }
+                  }}
                   className={`w-24 h-24 flex-shrink-0 rounded-2xl border-2 border-dashed flex items-center justify-center cursor-pointer transition-all hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 group relative overflow-hidden ${darkMode ? 'border-gray-700' : 'border-gray-300'}`}
                 >
                   {formData.icon_url ? (
