@@ -234,7 +234,31 @@ export default function App(){
       alert("Lỗi lưu dữ liệu: " + err.message);
     }
   };
-  const handleDelete=async id=>{if(!confirm('Xóa?'))return;const t=shortcuts.find(s=>s.id===id);if(t&&t.isLocal){const l=JSON.parse(localStorage.getItem('local_shortcuts')||'[]');localStorage.setItem('local_shortcuts',JSON.stringify(l.filter(s=>s.id!==id)));fetchData()}else if(isAdmin){await fetch(`/api/shortcuts/${id}`,{method:'DELETE'});fetchData()}};
+  const handleDelete = async (id) => {
+    if (!confirm('Xóa?')) return;
+    
+    // 1. Optimistic Update
+    const previousShortcuts = [...shortcuts];
+    setShortcuts(prev => prev.filter(s => s.id !== id));
+
+    try {
+      const t = previousShortcuts.find(s => s.id === id);
+      if (t && t.isLocal) {
+        // Local Sync
+        const l = JSON.parse(localStorage.getItem('local_shortcuts') || '[]');
+        localStorage.setItem('local_shortcuts', JSON.stringify(l.filter(s => s.id !== id)));
+        // done
+      } else if (isAdmin) {
+        // Server Sync
+        const res = await fetch(`/api/shortcuts/${id}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error("Delete failed");
+      }
+    } catch (err) {
+      // Rollback
+      setShortcuts(previousShortcuts);
+      alert("Lỗi xóa: " + err.message);
+    }
+  };
   const handleToggleFavorite = async (id, e) => {
     e.stopPropagation();
     // 1. Optimistic Update
