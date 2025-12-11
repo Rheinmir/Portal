@@ -4,6 +4,7 @@ const ShortcutCard = React.lazy(() => import('./components/ShortcutCard'));
 const InsightsModal = React.lazy(() => import('./components/InsightsModal'));
 const FilterPanel = React.lazy(() => import('./components/FilterPanel'));
 const Clock = React.lazy(() => import('./components/Clock'));
+const ConfirmDialog = React.lazy(() => import('./components/ConfirmDialog'));
 
 // Lazy load named exports
 const LoginModal = React.lazy(() => import('./components/AdminModals').then(module => ({ default: module.LoginModal })));
@@ -32,6 +33,7 @@ export default function App(){
   [bgUrlInput,setBgUrlInput]=useState(''),[isEditingPage,setIsEditingPage]=useState(false),[pageInput,setPageInput]=useState('');
   const [utcOffset, setUtcOffset] = useState(7);
   const [showColorPicker, setShowColorPicker] = useState(false);
+  const [confirmState, setConfirmState] = useState({ isOpen: false, message: '', onConfirm: null });
 
   const [currentPage,setCurrentPage]=useState(0),[touchStartX,setTouchStartX]=useState(null),[itemsPerPage,setItemsPerPage]=useState(DEFAULT_ITEMS_PER_PAGE);
   const [clientOrder,setClientOrder]=useState(()=>{const r=localStorage.getItem('shortcut_order_'+tenant);return r?JSON.parse(r):[]}),[draggingId,setDraggingId]=useState(null);
@@ -85,61 +87,107 @@ export default function App(){
   const saveConfig=async(k,v)=>{try{await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({[k]:v})})}catch{}};
   const handleTextColorChange=(m,c)=>{if(m==='light'){setLightTextColor(c);localStorage.setItem('custom_text_light',c);if(isAdmin)saveConfig('text_color_light',c)}else{setDarkTextColor(c);localStorage.setItem('custom_text_dark',c);if(isAdmin)saveConfig('text_color_dark',c)}};
   const handleBgUpload=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{const b=ev.target.result;
-    if(f.type.startsWith('video/')){setBgVideo(b);setBgImage(null);setBgEmbed(null);}else{setBgImage(b);setBgVideo(null);setBgEmbed(null);}
-    if(isAdmin){if(confirm(t('confirm_save_server_bg'))){saveConfig('default_background',b);alert(t('saved_to_server'))}else localStorage.setItem('custom_bg',b)}else localStorage.setItem('custom_bg',b)
+    const isVideo = f.type.startsWith('video/');
+    const proceed = () => {
+       if(isVideo){setBgVideo(b);setBgImage(null);setBgEmbed(null);}else{setBgImage(b);setBgVideo(null);setBgEmbed(null);}
+       if(isAdmin) { saveConfig('default_background',b); alert(t('saved_to_server')); } else { localStorage.setItem('custom_bg',b); }
+       setConfirmState({isOpen:false});
+    };
+    
+    if(isAdmin){
+      setConfirmState({
+        isOpen: true,
+        message: t('confirm_save_server_bg'),
+        onConfirm: proceed,
+        onCancel: () => { if(isVideo){setBgVideo(b);setBgImage(null);setBgEmbed(null);}else{setBgImage(b);setBgVideo(null);setBgEmbed(null);} localStorage.setItem('custom_bg',b); setConfirmState({isOpen:false}); }
+      });
+    } else {
+      if(isVideo){setBgVideo(b);setBgImage(null);setBgEmbed(null);}else{setBgImage(b);setBgVideo(null);setBgEmbed(null);}
+      localStorage.setItem('custom_bg',b);
+    }
   };r.readAsDataURL(f)};
   
   const applyBgUrl=()=>{
     const url = normalizeYoutube(bgUrlInput.trim());
     if(!url)return;
-    applyBackgroundSource(url);
-    if(isAdmin&&confirm(t('confirm_save_server_bg'))){
-      saveConfig('default_background',url);alert(t('saved_to_server'))
-    }else localStorage.setItem('custom_bg',url)
+    
+    const proceed = () => {
+      applyBackgroundSource(url);
+      if(isAdmin) { saveConfig('default_background',url); alert(t('saved_to_server')); } else { localStorage.setItem('custom_bg',url); }
+      setConfirmState({isOpen:false});
+    };
+
+    if(isAdmin){
+       setConfirmState({
+        isOpen: true,
+        message: t('confirm_save_server_bg'),
+        onConfirm: proceed,
+        onCancel: () => { applyBackgroundSource(url); localStorage.setItem('custom_bg',url); setConfirmState({isOpen:false}); }
+       });
+    } else {
+       applyBackgroundSource(url);
+       localStorage.setItem('custom_bg',url);
+    }
   };
   
   const handleResetBg=()=>{localStorage.removeItem('custom_bg');applyBackgroundSource(serverBg);alert(t('bg_reset'))};
-  const handleClearMedia=async()=>{if(!confirm(t('confirm_clear_media')))return;localStorage.removeItem('custom_bg');setBgImage(null);setBgVideo(null);setBgEmbed(null);if(isAdmin){try{await saveConfig('default_background','');alert(t('server_and_local_bg_cleared'))}catch{alert(t('error_clearing_server_bg'))}}else{alert(t('local_bg_cleared'))}};
+  
+  const handleClearMedia=async()=>{
+    setConfirmState({
+      isOpen: true,
+      message: t('confirm_clear_media'),
+      onConfirm: async () => {
+        localStorage.removeItem('custom_bg');setBgImage(null);setBgVideo(null);setBgEmbed(null);
+        if(isAdmin){try{await saveConfig('default_background','');alert(t('server_and_local_bg_cleared'))}catch{alert(t('error_clearing_server_bg'))}}else{alert(t('local_bg_cleared'))}
+        setConfirmState({isOpen:false});
+      }
+    });
+  };
 
   const handleForceSync=async()=>{
     if(!isAdmin)return;
-    if(confirm(t('confirm_force_sync'))){
-      try{
-        const p={
-          text_color_light:lightTextColor,
-          text_color_dark:darkTextColor,
-          overlay_opacity:overlayOpacity,
-          dark_mode_default:darkMode?'1':'0',
-          utc_offset:utcOffset
-        };
-        const currentBg = bgEmbed || bgVideo || bgImage;
-        if(currentBg) p.default_background = currentBg;
-        
-        const r=await fetch('/api/config/force',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});
-        const d=await r.json();
-        if(d.success){
-          if(d.version)localStorage.setItem('config_version',d.version);
-          let serverList=shortcuts.filter(s=>!s.isLocal);
-          if(clientOrder.length){
-            const idxMap=new Map(clientOrder.map((id,i)=>[id,i]));
-            serverList=[...serverList].sort((a,b)=>{
-              const ia=idxMap.has(a.id)?idxMap.get(a.id):Infinity;
-              const ib=idxMap.has(b.id)?idxMap.get(b.id):Infinity;
-              if(ia!==ib)return ia-ib;
-              return (b.favorite-a.favorite)||(sortBy==='alpha'?a.name.localeCompare(b.name):0)
-            });
-          }else{
-            serverList=[...serverList].sort((a,b)=>(b.favorite-a.favorite)||(sortBy==='alpha'?a.name.localeCompare(b.name):0));
-          }
-          const order=serverList.map(s=>s.id);
-          await fetch('/api/reorder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tenant,order})});
-          alert(t('sync_successful'));
-          fetchData()
-        }else alert(t('error') + ": "+d.error);
-      }catch{
-        alert(t('error_sync'))
+    setConfirmState({
+      isOpen: true,
+      message: t('confirm_force_sync'),
+      onConfirm: async () => {
+        try{
+          const p={
+            text_color_light:lightTextColor,
+            text_color_dark:darkTextColor,
+            overlay_opacity:overlayOpacity,
+            dark_mode_default:darkMode?'1':'0',
+            utc_offset:utcOffset
+          };
+          const currentBg = bgEmbed || bgVideo || bgImage;
+          if(currentBg) p.default_background = currentBg;
+          
+          const r=await fetch('/api/config/force',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});
+          const d=await r.json();
+          if(d.success){
+            if(d.version)localStorage.setItem('config_version',d.version);
+            let serverList=shortcuts.filter(s=>!s.isLocal);
+            if(clientOrder.length){
+              const idxMap=new Map(clientOrder.map((id,i)=>[id,i]));
+              serverList=[...serverList].sort((a,b)=>{
+                const ia=idxMap.has(a.id)?idxMap.get(a.id):Infinity;
+                const ib=idxMap.has(b.id)?idxMap.get(b.id):Infinity;
+                if(ia!==ib)return ia-ib;
+                return (b.favorite-a.favorite)||(sortBy==='alpha'?a.name.localeCompare(b.name):0)
+              });
+            }else{
+              serverList=[...serverList].sort((a,b)=>(b.favorite-a.favorite)||(sortBy==='alpha'?a.name.localeCompare(b.name):0));
+            }
+            const order=serverList.map(s=>s.id);
+            await fetch('/api/reorder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tenant,order})});
+            alert(t('sync_successful'));
+            fetchData()
+          }else alert(t('error') + ": "+d.error);
+        }catch{
+          alert(t('error_sync'))
+        }
+        setConfirmState({isOpen:false});
       }
-    }
+    });
   };
 
   const handleSaveSettings = async (newConfig) => {
@@ -236,30 +284,35 @@ export default function App(){
       alert(t('error_saving_data') + ": " + err.message);
     }
   };
-  const handleDelete = async (id) => {
-    if (!confirm(t('confirm_delete'))) return;
-    
-    // 1. Optimistic Update
-    const previousShortcuts = [...shortcuts];
-    setShortcuts(prev => prev.filter(s => s.id !== id));
+  const handleDelete = (id) => {
+    setConfirmState({
+      isOpen: true,
+      message: t('confirm_delete'),
+      onConfirm: async () => {
+        // 1. Optimistic Update
+        const previousShortcuts = [...shortcuts];
+        setShortcuts(prev => prev.filter(s => s.id !== id));
 
-    try {
-      const t = previousShortcuts.find(s => s.id === id);
-      if (t && t.isLocal) {
-        // Local Sync
-        const l = JSON.parse(localStorage.getItem('local_shortcuts') || '[]');
-        localStorage.setItem('local_shortcuts', JSON.stringify(l.filter(s => s.id !== id)));
-        // done
-      } else if (isAdmin) {
-        // Server Sync
-        const res = await fetch(`/api/shortcuts/${id}`, { method: 'DELETE' });
-        if (!res.ok) throw new Error("Delete failed");
+        try {
+          const t = previousShortcuts.find(s => s.id === id);
+          if (t && t.isLocal) {
+            // Local Sync
+            const l = JSON.parse(localStorage.getItem('local_shortcuts') || '[]');
+            localStorage.setItem('local_shortcuts', JSON.stringify(l.filter(s => s.id !== id)));
+            // done
+          } else if (isAdmin) {
+            // Server Sync
+            const res = await fetch(`/api/shortcuts/${id}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error("Delete failed");
+          }
+        } catch (err) {
+          // Rollback
+          setShortcuts(previousShortcuts);
+          alert(t('error_deleting') + ": " + err.message);
+        }
+        setConfirmState({isOpen:false});
       }
-    } catch (err) {
-      // Rollback
-      setShortcuts(previousShortcuts);
-      alert(t('error_deleting') + ": " + err.message);
-    }
+    });
   };
   const handleToggleFavorite = async (id, e) => {
     e.stopPropagation();
@@ -563,6 +616,16 @@ export default function App(){
           inputClass={inputClass}
           darkMode={darkMode}
           isEdit={!!formData.id}
+        />
+        </React.Suspense>
+        <React.Suspense fallback={null}>
+        <ConfirmDialog
+          isOpen={confirmState.isOpen}
+          message={confirmState.message}
+          onConfirm={confirmState.onConfirm}
+          onCancel={() => setConfirmState({ ...confirmState, isOpen: false })}
+          confirmText={t('yes')}
+          cancelText={t('no')}
         />
         </React.Suspense>
       </div>
