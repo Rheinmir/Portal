@@ -324,7 +324,7 @@ export default function App(){
         </div>
 
         <div className="fixed bottom-6 right-6 z-50 pointer-events-auto opacity-0 hover:opacity-100 transition-opacity duration-300 max-w-[calc(100vw-3rem)]">
-          <div className="group/menu flex items-center gap-2 p-2 rounded-full hover:bg-white/20 hover:backdrop-blur-md transition-all overflow-x-auto [&::-webkit-scrollbar]:hidden" style={{scrollbarWidth:'none', msOverflowStyle:'none'}}>
+          <div className="group/menu flex flex-wrap items-center justify-end gap-2 p-2 rounded-3xl hover:bg-white/20 hover:backdrop-blur-md transition-all">
             <div className="flex items-center gap-2">
             {(bgImage||bgVideo||bgEmbed)&&<div className="flex items-center gap-1 mr-2 bg-black/40 rounded-full px-2 py-1 backdrop-blur-sm"><span className="text-[10px] text-white/90 font-bold">BG</span><input type="range" min="0" max="0.9" step="0.1" value={overlayOpacity} onChange={e=>{const v=parseFloat(e.target.value);setOverlayOpacity(v);localStorage.setItem('overlayOpacity',v);if(isAdmin)saveConfig('overlay_opacity',v)}} className="w-16 h-1 accent-[#009FB8] cursor-pointer"/></div>}
             <button onClick={()=>setDarkMode(!darkMode)} className={`p-2 rounded-full border shadow-sm ${inputClass} ${(bgImage||bgVideo||bgEmbed)?'bg-opacity-80':''}`}>{darkMode?<Sun size={18} className="text-yellow-400"/>:<Moon size={18} className="text-gray-600"/>}</button>
