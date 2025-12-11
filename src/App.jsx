@@ -89,9 +89,9 @@ export default function App(){
   const handleBgUpload=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{const b=ev.target.result;
     const isVideo = f.type.startsWith('video/');
     const proceed = () => {
+       setConfirmState({isOpen:false}); // Close first
        if(isVideo){setBgVideo(b);setBgImage(null);setBgEmbed(null);}else{setBgImage(b);setBgVideo(null);setBgEmbed(null);}
        if(isAdmin) { saveConfig('default_background',b); alert(t('saved_to_server')); } else { localStorage.setItem('custom_bg',b); }
-       setConfirmState({isOpen:false});
     };
     
     if(isAdmin){
@@ -112,9 +112,9 @@ export default function App(){
     if(!url)return;
     
     const proceed = () => {
+      setConfirmState({isOpen:false}); // Close first
       applyBackgroundSource(url);
       if(isAdmin) { saveConfig('default_background',url); alert(t('saved_to_server')); } else { localStorage.setItem('custom_bg',url); }
-      setConfirmState({isOpen:false});
     };
 
     if(isAdmin){
@@ -137,9 +137,9 @@ export default function App(){
       isOpen: true,
       message: t('confirm_clear_media'),
       onConfirm: async () => {
+        setConfirmState({isOpen:false}); // Close first
         localStorage.removeItem('custom_bg');setBgImage(null);setBgVideo(null);setBgEmbed(null);
         if(isAdmin){try{await saveConfig('default_background','');alert(t('server_and_local_bg_cleared'))}catch{alert(t('error_clearing_server_bg'))}}else{alert(t('local_bg_cleared'))}
-        setConfirmState({isOpen:false});
       }
     });
   };
@@ -150,6 +150,7 @@ export default function App(){
       isOpen: true,
       message: t('confirm_force_sync'),
       onConfirm: async () => {
+        setConfirmState({isOpen:false}); // Close first
         try{
           const p={
             text_color_light:lightTextColor,
@@ -185,7 +186,6 @@ export default function App(){
         }catch{
           alert(t('error_sync'))
         }
-        setConfirmState({isOpen:false});
       }
     });
   };
@@ -289,6 +289,8 @@ export default function App(){
       isOpen: true,
       message: t('confirm_delete'),
       onConfirm: async () => {
+        setConfirmState({isOpen:false}); // Close first
+        
         // 1. Optimistic Update
         const previousShortcuts = [...shortcuts];
         setShortcuts(prev => prev.filter(s => s.id !== id));
@@ -310,7 +312,6 @@ export default function App(){
           setShortcuts(previousShortcuts);
           alert(t('error_deleting') + ": " + err.message);
         }
-        setConfirmState({isOpen:false});
       }
     });
   };
@@ -542,8 +543,20 @@ export default function App(){
               <div className="hidden sm:flex items-center gap-1 ml-1"><input type="text" placeholder={t('image_gif_link')} className={`px-2 py-1 text-[11px] rounded-full border max-w-[120px] ${inputClass}`} value={bgUrlInput} onChange={e=>setBgUrlInput(e.target.value)}/><button type="button" onClick={applyBgUrl} className="px-2 py-1 text-[11px] rounded-full border border-gray-400/50 hover:bg-gray-200 dark:hover:bg-gray-700">{t('set')}</button></div>
               
               {/* Language Switcher */}
-              <div className="flex bg-black/5 dark:bg-white/10 rounded-full p-1 mr-2 gap-1">
-                 {['vn','en','de'].map(l=>(<button key={l} className={`px-2 py-0.5 text-[10px] uppercase font-bold rounded-full transition-all ${lang===l?'bg-white dark:bg-gray-700 text-black dark:text-white shadow-sm':'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`} onClick={()=>setLang(l)}>{l}</button>))}
+              {/* Language Switcher Dropdown */}
+              <div className="relative group/lang mr-2">
+                 <select 
+                   value={lang} 
+                   onChange={(e)=>setLang(e.target.value)} 
+                   className="appearance-none bg-black/5 dark:bg-white/10 text-xs font-bold uppercase rounded-xl px-3 py-1.5 pr-6 cursor-pointer outline-none hover:bg-black/10 dark:hover:bg-white/20 transition-all text-gray-700 dark:text-gray-300"
+                 >
+                   {['vn','en','de','kz','ka','ru'].map(l=>(
+                     <option key={l} value={l} className="text-black">{l.toUpperCase()}</option>
+                   ))}
+                 </select>
+                 <div className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-50">
+                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+                 </div>
               </div>
 
               {isAdmin&&(<>
