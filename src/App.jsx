@@ -1015,21 +1015,97 @@ export default function App() {
     bgEmbed,
     isGrouped,
   ]);
-  const totalPages = Math.max(
-    1,
-    Math.ceil(filteredShortcuts.length / Math.max(1, itemsPerPage))
-  );
+
+  const partitionedPages = useMemo(() => {
+    if (!itemsPerPage) return [];
+
+    // Default / Ungrouped behavior: simple slice
+    if (!isGrouped) {
+      const pages = [];
+      for (let i = 0; i < filteredShortcuts.length; i += itemsPerPage) {
+        pages.push(filteredShortcuts.slice(i, i + itemsPerPage));
+      }
+      return pages.length ? pages : [[]];
+    }
+
+    // Grouped Behavior: Smart Pagination
+    // 1. Group items preserve order
+    const groups = {};
+    const uncategorizedKey = t("uncategorized") || "Other";
+
+    filteredShortcuts.forEach((item) => {
+      const key = item.parent_label || uncategorizedKey;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(item);
+    });
+
+    // 2. Sort Groups
+    const sortedKeys = Object.keys(groups).sort((a, b) => {
+      if (a === uncategorizedKey) return 1;
+      if (b === uncategorizedKey) return -1;
+      return a.localeCompare(b);
+    });
+
+    const pages = [];
+    let currentPageItems = [];
+
+    sortedKeys.forEach((key) => {
+      const groupItems = groups[key];
+
+      // Scenario A: Fits in current page
+      if (currentPageItems.length + groupItems.length <= itemsPerPage) {
+        currentPageItems.push(...groupItems);
+      }
+      // Scenario B: Smart Pagination
+      else {
+        // If the group wraps but CAN fit on a single page, push to next page
+        if (groupItems.length <= itemsPerPage) {
+          if (currentPageItems.length > 0) {
+            pages.push(currentPageItems);
+            currentPageItems = [];
+          }
+          currentPageItems.push(...groupItems);
+        }
+        // Scenario C: Group is huge > Page, MUST split
+        else {
+          let remaining = [...groupItems];
+
+          // Fill current page first with as much as possible
+          const spaceInCurrent = itemsPerPage - currentPageItems.length;
+          if (spaceInCurrent > 0) {
+            currentPageItems.push(...remaining.splice(0, spaceInCurrent));
+            pages.push(currentPageItems);
+            currentPageItems = [];
+          } else {
+            if (currentPageItems.length) pages.push(currentPageItems);
+            currentPageItems = [];
+          }
+
+          // Now fill completely new pages
+          while (remaining.length > 0) {
+            if (remaining.length <= itemsPerPage) {
+              currentPageItems = remaining; // Start new current page with remainder
+              remaining = [];
+            } else {
+              pages.push(remaining.splice(0, itemsPerPage));
+            }
+          }
+        }
+      }
+    });
+
+    if (currentPageItems.length > 0) pages.push(currentPageItems);
+
+    return pages.length ? pages : [[]];
+  }, [filteredShortcuts, itemsPerPage, isGrouped, t]);
+
+  const totalPages = Math.max(1, partitionedPages.length);
+
   useEffect(() => {
     if (currentPage >= totalPages) setCurrentPage(totalPages - 1);
   }, [totalPages, currentPage]);
-  const pagedShortcuts = useMemo(
-    () =>
-      filteredShortcuts.slice(
-        currentPage * itemsPerPage,
-        (currentPage + 1) * itemsPerPage
-      ),
-    [filteredShortcuts, currentPage, itemsPerPage]
-  );
+
+  const pagedShortcuts = partitionedPages[currentPage] || [];
   const goNext = () => setCurrentPage((p) => Math.min(p + 1, totalPages - 1));
   const goPrev = () => setCurrentPage((p) => Math.max(p - 1, 0));
   const bgClass = darkMode ? "bg-gray-900" : "bg-[#F4F4F4]",
