@@ -1357,16 +1357,24 @@ export default function App() {
         {/* GRID */}
         <div
           ref={gridWrapperRef}
-          className="max-w-7xl mx-auto px-6 pb-32 pt-8 min-h-[60vh] outline-none"
-          style={{ overflow: "hidden" }}
+          className={`max-w-7xl mx-auto px-6 pb-32 pt-8 min-h-[60vh] outline-none ${
+            isGrouped ? "scrollbar-hide" : ""
+          }`}
+          style={{
+            overflowY: isGrouped ? "auto" : "hidden",
+            overflowX: "hidden",
+            maxHeight: isGrouped ? "calc(100vh - 180px)" : "none",
+          }}
           onWheel={(e) => {
+            if (isGrouped) return; // Allow native scroll
             e.preventDefault();
             if (e.deltaY > 0 || e.deltaX > 0) goNext();
             else goPrev();
           }}
           onTouchStart={(e) => setTouchStartX(e.touches[0].clientX)}
-          onTouchMove={(e) => e.preventDefault()}
+          onTouchMove={(e) => !isGrouped && e.preventDefault()}
           onTouchEnd={(e) => {
+            if (isGrouped) return;
             if (touchStartX === null) return;
             const d = e.changedTouches[0].clientX - touchStartX;
             if (Math.abs(d) > 50) {
