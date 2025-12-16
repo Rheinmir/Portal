@@ -86,7 +86,7 @@ export default function ShortcutCard({
         {item.icon_url ? (
           <img
             src={item.icon_url}
-            className="w-full h-full object-contain"
+            className="w-full h-full object-cover"
             alt={item.name}
             style={{ borderRadius: 0, boxShadow: "none", background: "transparent" }}
           />

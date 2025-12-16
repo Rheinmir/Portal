@@ -1,9 +1,15 @@
-import React,{useState,useEffect,useRef,useMemo}from'react';import{Save,Trash2,Plus,Search,Activity,Copy,Check,Settings,LogOut,X,Filter,Tag,Upload,Download,FileUp,Pencil,Star,Moon,Sun,LayoutGrid,List,Image as ImageIcon,RotateCcw,BarChart as ChartIcon,Palette,Type,RefreshCw}from'lucide-react';
-import ShortcutCard from './components/ShortcutCard';
-import InsightsModal from './components/InsightsModal';
-import FilterPanel from './components/FilterPanel';
-import Clock from './components/Clock';
-import { LoginModal, AddEditModal, SettingsModal } from './components/AdminModals';
+import React,{useState,useEffect,useRef,useMemo}from'react';import { Trash2, Plus, Grip, Search, Moon, Sun, Settings, Key, BarChart as ChartIcon, Image as ImageIcon, X, Palette, Type, Link, Upload, RefreshCw, Filter, Tag, Download, FileUp, Pencil, Star, LayoutGrid, List, RotateCcw, LogOut, Camera } from 'lucide-react';
+import { useLanguage } from './contexts/LanguageContext';
+const ShortcutCard = React.lazy(() => import('./components/ShortcutCard'));
+const InsightsModal = React.lazy(() => import('./components/InsightsModal'));
+const FilterPanel = React.lazy(() => import('./components/FilterPanel'));
+const Clock = React.lazy(() => import('./components/Clock'));
+const ConfirmDialog = React.lazy(() => import('./components/ConfirmDialog'));
+
+// Lazy load named exports
+const LoginModal = React.lazy(() => import('./components/AdminModals').then(module => ({ default: module.LoginModal })));
+const AddEditModal = React.lazy(() => import('./components/AdminModals').then(module => ({ default: module.AddEditModal })));
+const SettingsModal = React.lazy(() => import('./components/AdminModals').then(module => ({ default: module.SettingsModal })));
 
 const COLOR_PRESETS=['#0A1A2F','#009FB8','#6D28D9','#BE123C','#059669','#C2410C','#475569'];const DEFAULT_LIGHT_TEXT='#2C2C2C',DEFAULT_DARK_TEXT='#E2E8F0';
 const getContrastYIQ=(hex)=>{if(!hex)return'#fff';const h=hex.replace('#','');const r=parseInt(h.substr(0,2),16),g=parseInt(h.substr(2,2),16),b=parseInt(h.substr(4,2),16);return(((r*299)+(g*587)+(b*114))/1000)>=128?'#000':'#fff'};
@@ -20,12 +26,18 @@ function normalizeYoutube(url) {
 }
 
 export default function App(){
+  const { t, lang, setLang } = useLanguage();
   const[shortcuts,setShortcuts]=useState([]),[labelColors,setLabelColors]=useState({}),[loading,setLoading]=useState(true),[darkMode,setDarkMode]=useState(()=>localStorage.getItem('darkMode')==='true'),[bgImage,setBgImage]=useState(null),[serverBg,setServerBg]=useState(null),[bgVideo,setBgVideo]=useState(null),[bgEmbed,setBgEmbed]=useState(null),[overlayOpacity,setOverlayOpacity]=useState(()=>{const r=localStorage.getItem('overlayOpacity');const n=parseFloat(r);return isNaN(n)?0.5:n});
   const[lightTextColor,setLightTextColor]=useState(()=>localStorage.getItem('custom_text_light')||DEFAULT_LIGHT_TEXT),[darkTextColor,setDarkTextColor]=useState(()=>localStorage.getItem('custom_text_dark')||DEFAULT_DARK_TEXT);
-  const[formData,setFormData]=useState({id:null,name:'',url:'',icon_url:'',parent_label:'',parent_color:COLOR_PRESETS[0],child_label:'',child_color:COLOR_PRESETS[1],isLocal:false}),[searchTerm,setSearchTerm]=useState(''),[showFilterPanel,setShowFilterPanel]=useState(false),[activeParentFilter,setActiveParentFilter]=useState(null),[activeChildFilter,setActiveChildFilter]=useState(null),[isAdmin,setIsAdmin]=useState(false),[showLoginModal,setShowLoginModal]=useState(false),[showAddModal,setShowAddModal]=useState(false),[showInsightsModal,setShowInsightsModal]=useState(false),[showSettingsModal,setShowSettingsModal]=useState(false),[insightsData,setInsightsData]=useState(null),[loginCreds,setLoginCreds]=useState({username:'',password:''}),[loginError,setLoginError]=useState(''),[sortBy,setSortBy]=useState('default'),[tenant,setTenant]=useState(()=>normalizeTenant(localStorage.getItem('tenant'))),
+  const[formData,setFormData]=useState({id:null,name:'',url:'',icon_url:'',parent_label:'',parent_color:COLOR_PRESETS[0],child_label:'',child_color:COLOR_PRESETS[1],isLocal:false}),[searchTerm,setSearchTerm]=useState(''),[debouncedSearchTerm,setDebouncedSearchTerm]=useState(''),[showFilterPanel,setShowFilterPanel]=useState(false),[activeParentFilter,setActiveParentFilter]=useState(null),[activeChildFilter,setActiveChildFilter]=useState(null),[isAdmin,setIsAdmin]=useState(false),[showLoginModal,setShowLoginModal]=useState(false),[showAddModal,setShowAddModal]=useState(false),[showInsightsModal,setShowInsightsModal]=useState(false),[showSettingsModal,setShowSettingsModal]=useState(false),[insightsData,setInsightsData]=useState(null),[loginCreds,setLoginCreds]=useState({username:'',password:''}),[loginError,setLoginError]=useState(''),[sortBy,setSortBy]=useState('default'),[tenant,setTenant]=useState(()=>normalizeTenant(localStorage.getItem('tenant'))),
   [bgUrlInput,setBgUrlInput]=useState(''),[isEditingPage,setIsEditingPage]=useState(false),[pageInput,setPageInput]=useState('');
   const [utcOffset, setUtcOffset] = useState(7);
   const [showColorPicker, setShowColorPicker] = useState(false);
+  const [confirmState, setConfirmState] = useState({ isOpen: false, message: '', onConfirm: null });
+  const [searchFile, setSearchFile] = useState(null);
+  const [searchPreview, setSearchPreview] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const searchFileInputRef = useRef(null);
 
   const [currentPage,setCurrentPage]=useState(0),[touchStartX,setTouchStartX]=useState(null),[itemsPerPage,setItemsPerPage]=useState(DEFAULT_ITEMS_PER_PAGE);
   const [clientOrder,setClientOrder]=useState(()=>{const r=localStorage.getItem('shortcut_order_'+tenant);return r?JSON.parse(r):[]}),[draggingId,setDraggingId]=useState(null);
@@ -49,9 +61,29 @@ export default function App(){
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showColorPicker]);
 
+  useEffect(()=>{
+    const handleWindowDragEnter = (e) => {
+      e.preventDefault();
+      // Only trigger if dragging files
+      if (e.dataTransfer.types && e.dataTransfer.types.includes('Files')) {
+        setIsDragging(true);
+      }
+    };
+    window.addEventListener('dragenter', handleWindowDragEnter);
+    return () => window.removeEventListener('dragenter', handleWindowDragEnter);
+  }, []);
+
   useEffect(()=>{if(darkMode)document.documentElement.classList.add('dark');else document.documentElement.classList.remove('dark');localStorage.setItem('darkMode',darkMode)},[darkMode]);
   useEffect(()=>{const r=localStorage.getItem('shortcut_order_'+tenant);setClientOrder(r?JSON.parse(r):[])},[tenant]);
-  useEffect(()=>{setCurrentPage(0)},[searchTerm,activeParentFilter,activeChildFilter,sortBy,tenant]);
+  useEffect(()=>{setCurrentPage(0)},[debouncedSearchTerm,activeParentFilter,activeChildFilter,sortBy,tenant]);
+
+  // Debounce search term
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
   const applyBackgroundSource=(src,isFromServer=false)=>{
     if(isFromServer)setServerBg(src);
@@ -71,90 +103,330 @@ export default function App(){
   const saveConfig=async(k,v)=>{try{await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({[k]:v})})}catch{}};
   const handleTextColorChange=(m,c)=>{if(m==='light'){setLightTextColor(c);localStorage.setItem('custom_text_light',c);if(isAdmin)saveConfig('text_color_light',c)}else{setDarkTextColor(c);localStorage.setItem('custom_text_dark',c);if(isAdmin)saveConfig('text_color_dark',c)}};
   const handleBgUpload=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{const b=ev.target.result;
-    if(f.type.startsWith('video/')){setBgVideo(b);setBgImage(null);setBgEmbed(null);}else{setBgImage(b);setBgVideo(null);setBgEmbed(null);}
-    if(isAdmin){if(confirm("Lưu mặc định server (sẽ thay thế nền/video cũ)?")){saveConfig('default_background',b);alert("Đã lưu server!")}else localStorage.setItem('custom_bg',b)}else localStorage.setItem('custom_bg',b)
+    const isVideo = f.type.startsWith('video/');
+    const proceed = () => {
+       setConfirmState({isOpen:false}); // Close first
+       if(isVideo){setBgVideo(b);setBgImage(null);setBgEmbed(null);}else{setBgImage(b);setBgVideo(null);setBgEmbed(null);}
+       if(isAdmin) { saveConfig('default_background',b); alert(t('saved_to_server')); } else { localStorage.setItem('custom_bg',b); }
+    };
+    
+    if(isAdmin){
+      setConfirmState({
+        isOpen: true,
+        message: t('confirm_save_server_bg'),
+        onConfirm: proceed,
+        onCancel: () => { if(isVideo){setBgVideo(b);setBgImage(null);setBgEmbed(null);}else{setBgImage(b);setBgVideo(null);setBgEmbed(null);} localStorage.setItem('custom_bg',b); setConfirmState({isOpen:false}); }
+      });
+    } else {
+      if(isVideo){setBgVideo(b);setBgImage(null);setBgEmbed(null);}else{setBgImage(b);setBgVideo(null);setBgEmbed(null);}
+      localStorage.setItem('custom_bg',b);
+    }
   };r.readAsDataURL(f)};
   
   const applyBgUrl=()=>{
     const url = normalizeYoutube(bgUrlInput.trim());
     if(!url)return;
-    applyBackgroundSource(url);
-    if(isAdmin&&confirm("Lưu mặc định server?")){
-      saveConfig('default_background',url);alert("Đã lưu server!")
-    }else localStorage.setItem('custom_bg',url)
+    
+    const proceed = () => {
+      setConfirmState({isOpen:false}); // Close first
+      applyBackgroundSource(url);
+      if(isAdmin) { saveConfig('default_background',url); alert(t('saved_to_server')); } else { localStorage.setItem('custom_bg',url); }
+    };
+
+    if(isAdmin){
+       setConfirmState({
+        isOpen: true,
+        message: t('confirm_save_server_bg'),
+        onConfirm: proceed,
+        onCancel: () => { applyBackgroundSource(url); localStorage.setItem('custom_bg',url); setConfirmState({isOpen:false}); }
+       });
+    } else {
+       applyBackgroundSource(url);
+       localStorage.setItem('custom_bg',url);
+    }
   };
   
-  const handleResetBg=()=>{localStorage.removeItem('custom_bg');applyBackgroundSource(serverBg);alert("Đã reset BG")};
-  const handleClearMedia=async()=>{if(!confirm("Xóa TẤT CẢ nền ảnh/video đã tải lên?\n- Máy bạn sẽ mất nền\n- Nếu là admin: xóa luôn nền server"))return;localStorage.removeItem('custom_bg');setBgImage(null);setBgVideo(null);setBgEmbed(null);if(isAdmin){try{await saveConfig('default_background','');alert('Đã xóa nền server và máy bạn.')}catch{alert('Lỗi xóa server.')}}else{alert('Đã xóa nền máy bạn.')}};
+  const handleResetBg=()=>{localStorage.removeItem('custom_bg');applyBackgroundSource(serverBg);alert(t('bg_reset'))};
+  
+  const handleClearMedia=async()=>{
+    setConfirmState({
+      isOpen: true,
+      message: t('confirm_clear_media'),
+      onConfirm: async () => {
+        setConfirmState({isOpen:false}); // Close first
+        localStorage.removeItem('custom_bg');setBgImage(null);setBgVideo(null);setBgEmbed(null);
+        if(isAdmin){try{await saveConfig('default_background','');alert(t('server_and_local_bg_cleared'))}catch{alert(t('error_clearing_server_bg'))}}else{alert(t('local_bg_cleared'))}
+      }
+    });
+  };
 
   const handleForceSync=async()=>{
     if(!isAdmin)return;
-    if(confirm("Cập nhật cấu hình lên Server và ép Client tải lại?")){
-      try{
-        const p={
-          text_color_light:lightTextColor,
-          text_color_dark:darkTextColor,
-          overlay_opacity:overlayOpacity,
-          dark_mode_default:darkMode?'1':'0',
-          utc_offset:utcOffset
-        };
-        const currentBg = bgEmbed || bgVideo || bgImage;
-        if(currentBg) p.default_background = currentBg;
-        
-        const r=await fetch('/api/config/force',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});
-        const d=await r.json();
-        if(d.success){
-          if(d.version)localStorage.setItem('config_version',d.version);
-          let serverList=shortcuts.filter(s=>!s.isLocal);
-          if(clientOrder.length){
-            const idxMap=new Map(clientOrder.map((id,i)=>[id,i]));
-            serverList=[...serverList].sort((a,b)=>{
-              const ia=idxMap.has(a.id)?idxMap.get(a.id):Infinity;
-              const ib=idxMap.has(b.id)?idxMap.get(b.id):Infinity;
-              if(ia!==ib)return ia-ib;
-              return (b.favorite-a.favorite)||(sortBy==='alpha'?a.name.localeCompare(b.name):0)
-            });
-          }else{
-            serverList=[...serverList].sort((a,b)=>(b.favorite-a.favorite)||(sortBy==='alpha'?a.name.localeCompare(b.name):0));
-          }
-          const order=serverList.map(s=>s.id);
-          await fetch('/api/reorder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tenant,order})});
-          alert("Đã đồng bộ!");
-          fetchData()
-        }else alert("Lỗi: "+d.error);
-      }catch{
-        alert("Lỗi sync")
+    setConfirmState({
+      isOpen: true,
+      message: t('confirm_force_sync'),
+      onConfirm: async () => {
+        setConfirmState({isOpen:false}); // Close first
+        try{
+          const p={
+            text_color_light:lightTextColor,
+            text_color_dark:darkTextColor,
+            overlay_opacity:overlayOpacity,
+            dark_mode_default:darkMode?'1':'0',
+            utc_offset:utcOffset
+          };
+          const currentBg = bgEmbed || bgVideo || bgImage;
+          if(currentBg) p.default_background = currentBg;
+          
+          const r=await fetch('/api/config/force',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});
+          const d=await r.json();
+          if(d.success){
+            if(d.version)localStorage.setItem('config_version',d.version);
+            let serverList=shortcuts.filter(s=>!s.isLocal);
+            if(clientOrder.length){
+              const idxMap=new Map(clientOrder.map((id,i)=>[id,i]));
+              serverList=[...serverList].sort((a,b)=>{
+                const ia=idxMap.has(a.id)?idxMap.get(a.id):Infinity;
+                const ib=idxMap.has(b.id)?idxMap.get(b.id):Infinity;
+                if(ia!==ib)return ia-ib;
+                return (b.favorite-a.favorite)||(sortBy==='alpha'?a.name.localeCompare(b.name):0)
+              });
+            }else{
+              serverList=[...serverList].sort((a,b)=>(b.favorite-a.favorite)||(sortBy==='alpha'?a.name.localeCompare(b.name):0));
+            }
+            const order=serverList.map(s=>s.id);
+            await fetch('/api/reorder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tenant,order})});
+            alert(t('sync_successful'));
+            fetchData()
+          }else alert(t('error') + ": "+d.error);
+        }catch{
+          alert(t('error_sync'))
+        }
       }
-    }
+    });
   };
 
   const handleSaveSettings = async (newConfig) => {
     try {
-      if (newConfig.utcOffset !== utcOffset) {
-        setUtcOffset(newConfig.utcOffset);
-        await saveConfig('utc_offset', newConfig.utcOffset);
+      if(newConfig.utcOffset !== undefined) {
+          localStorage.setItem('utc_offset', newConfig.utcOffset);
+          setUtcOffset(newConfig.utcOffset);
+          if(isAdmin) saveConfig('utc_offset', newConfig.utcOffset);
       }
+      alert(t('settings_saved'));
       setShowSettingsModal(false);
-      alert('Đã lưu cấu hình!');
-    } catch (e) {
-      alert('Lỗi lưu cấu hình');
+    } catch (err) {
+      alert(t('error_saving_settings'));
     }
   };
 
-  const fetchInsights=async()=>{try{const r=await fetch('/api/insights');setInsightsData(await r.json());setShowInsightsModal(true)}catch{alert("Lỗi insights")}};
+  const handleSearchImageSelect = (e) => {
+    const file = e.target.files[0];
+    if (file && file.type.startsWith('image/')) {
+        setSearchFile(file);
+        const reader = new FileReader();
+        reader.onload = (ev) => setSearchPreview(ev.target.result);
+        reader.readAsDataURL(file);
+    }
+  };
+
+  const handleGlobalDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'copy';
+  };
+
+  const handleGlobalDrop = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+        const file = e.dataTransfer.files[0];
+        if (file.type.startsWith('image/')) {
+            setSearchFile(file);
+            const reader = new FileReader();
+            reader.onload = (ev) => setSearchPreview(ev.target.result);
+            reader.readAsDataURL(file);
+        }
+    }
+  };
+
+  const handleSearchSubmit = async () => {
+    if (searchFile) {
+        // Direct upload yields 403 (CORS/Origin check by Google).
+        // Workaround: Copy to clipboard and open Lens.
+        try {
+            // Need to create a proper ClipboardItem with the blob
+            const type = searchFile.type;
+            const blob = searchFile; // File is a specific kind of Blob
+            await navigator.clipboard.write([
+                new ClipboardItem({
+                    [type]: blob
+                })
+            ]);
+            window.open('https://lens.google.com/', '_blank');
+            alert(t('image_copied_hint'));
+        } catch (err) {
+            console.error(err);
+            // Fallback for types or context issues
+            alert(t('error_copy_image') + ": " + err.message);
+            window.open('https://lens.google.com/', '_blank');
+        }
+    } else if (searchTerm.trim()) {
+        window.open('https://www.google.com/search?q=' + encodeURIComponent(searchTerm), '_blank');
+    }
+  };
+  
+  const clearSearchImage = (e) => {
+    e.stopPropagation();
+    setSearchFile(null);
+    setSearchPreview(null);
+    if(searchFileInputRef.current) searchFileInputRef.current.value='';
+  };
+
+  const fetchInsights=async()=>{try{const r=await fetch('/api/insights');setInsightsData(await r.json());setShowInsightsModal(true)}catch{alert(t('error_insights'))}};
   const handleExportStats=()=>{window.open('/api/insights/export','_blank')};
   const handleExportSummary=()=>{window.open('/api/insights/export/summary','_blank')};
 
   const resetForm=()=>setFormData({id:null,name:'',url:'',icon_url:'',parent_label:'',parent_color:COLOR_PRESETS[0],child_label:'',child_color:COLOR_PRESETS[1],isLocal:false});
-  const handleSubmit=async e=>{e.preventDefault();if(!formData.name.trim()||!formData.url.trim())return alert('Thiếu tên/URL');let iconToSave=formData.icon_url;if(!iconToSave){try{const urlObj=new URL(formData.url);iconToSave=`https://www.google.com/s2/favicons?domain=${urlObj.hostname}&sz=128`}catch(e){}}const payload={...formData,icon_url:iconToSave};const isLocal=!isAdmin||formData.isLocal;if(isLocal){const l=JSON.parse(localStorage.getItem('local_shortcuts')||'[]');let nl;if(formData.id&&formData.isLocal)nl=l.map(s=>s.id===formData.id?{...payload,id:formData.id}:s);else nl=[{...payload,id:Date.now(),clicks:0,favorite:0},...l];localStorage.setItem('local_shortcuts',JSON.stringify(nl));fetchData();setShowAddModal(false);resetForm()}else{try{const r=await fetch(formData.id?`/api/shortcuts/${formData.id}`:'/api/shortcuts',{method:formData.id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});if(r.ok){await fetchData();setShowAddModal(false);resetForm()}}catch{alert('Lỗi Server')}}};
-  const handleDelete=async id=>{if(!confirm('Xóa?'))return;const t=shortcuts.find(s=>s.id===id);if(t&&t.isLocal){const l=JSON.parse(localStorage.getItem('local_shortcuts')||'[]');localStorage.setItem('local_shortcuts',JSON.stringify(l.filter(s=>s.id!==id)));fetchData()}else if(isAdmin){await fetch(`/api/shortcuts/${id}`,{method:'DELETE'});fetchData()}};
-  const handleToggleFavorite=async(id,e)=>{e.stopPropagation();const t=shortcuts.find(s=>s.id===id);if(t&&t.isLocal){const l=JSON.parse(localStorage.getItem('local_shortcuts')||'[]');localStorage.setItem('local_shortcuts',JSON.stringify(l.map(s=>s.id===id?{...s,favorite:s.favorite?0:1}:s)));fetchData()}else{await fetch(`/api/favorite/${id}`,{method:'POST'});fetchData()}};
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!formData.name.trim() || !formData.url.trim()) return alert(t('error_server')); // Using generic error for simplicity or add specific key
+
+    // 1. Prepare Data
+    let iconToSave = formData.icon_url;
+    if (!iconToSave) {
+      try {
+        const urlObj = new URL(formData.url);
+        iconToSave = `https://www.google.com/s2/favicons?domain=${urlObj.hostname}&sz=128`;
+      } catch (e) {}
+    }
+
+    const payload = { ...formData, icon_url: iconToSave };
+    const isEdit = !!formData.id;
+    
+    // 2. Optimistic Update
+    const previousShortcuts = [...shortcuts];
+    const tempId = isEdit ? formData.id : Date.now(); // Temp ID for new item
+    const optimisticItem = {
+      ...payload,
+      id: tempId,
+      clicks: isEdit ? (shortcuts.find(s => s.id === formData.id)?.clicks || 0) : 0,
+      favorite: isEdit ? (shortcuts.find(s => s.id === formData.id)?.favorite || 0) : 0,
+    };
+
+    // Update Local State Immediately
+    if (isEdit) {
+      setShortcuts(prev => prev.map(s => s.id === formData.id ? optimisticItem : s));
+    } else {
+      setShortcuts(prev => [optimisticItem, ...prev]);
+    }
+
+    // Close Modal Immediately
+    setShowAddModal(false);
+    resetForm();
+
+    // 3. Background Sync
+    const isLocal = !isAdmin || formData.isLocal;
+    
+    try {
+      if (isLocal) {
+        // Local Storage Sync
+        const l = JSON.parse(localStorage.getItem('local_shortcuts') || '[]');
+        let nl;
+        if (isEdit && formData.isLocal) {
+          nl = l.map(s => s.id === formData.id ? optimisticItem : s);
+        } else {
+          nl = [optimisticItem, ...l];
+        }
+        localStorage.setItem('local_shortcuts', JSON.stringify(nl));
+        // No fetch needed for local, just update state (already done)
+      } else {
+        // Server Sync
+        const method = isEdit ? 'PUT' : 'POST';
+        const url = isEdit ? `/api/shortcuts/${formData.id}` : '/api/shortcuts';
+        
+        const res = await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) throw new Error("Sync failed");
+
+        // Silent Refetch to get real ID (crucial for new items)
+        // We wait a bit or just call it.
+        // For new items, if we don't get the real ID, subsequent edits/deletes will fail.
+        await fetchData(); 
+      }
+    } catch (err) {
+      // 4. Rollback on Error
+      setShortcuts(previousShortcuts);
+      alert(t('error_saving_data') + ": " + err.message);
+    }
+  };
+  const handleDelete = (id) => {
+    setConfirmState({
+      isOpen: true,
+      message: t('confirm_delete'),
+      onConfirm: async () => {
+        setConfirmState({isOpen:false}); // Close first
+        
+        // 1. Optimistic Update
+        const previousShortcuts = [...shortcuts];
+        setShortcuts(prev => prev.filter(s => s.id !== id));
+
+        try {
+          const t = previousShortcuts.find(s => s.id === id);
+          if (t && t.isLocal) {
+            // Local Sync
+            const l = JSON.parse(localStorage.getItem('local_shortcuts') || '[]');
+            localStorage.setItem('local_shortcuts', JSON.stringify(l.filter(s => s.id !== id)));
+            // done
+          } else if (isAdmin) {
+            // Server Sync
+            const res = await fetch(`/api/shortcuts/${id}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error("Delete failed");
+          }
+        } catch (err) {
+          // Rollback
+          setShortcuts(previousShortcuts);
+          alert(t('error_deleting') + ": " + err.message);
+        }
+      }
+    });
+  };
+  const handleToggleFavorite = async (id, e) => {
+    e.stopPropagation();
+    // 1. Optimistic Update
+    const previousShortcuts = [...shortcuts];
+    setShortcuts(prev => prev.map(s => s.id === id ? { ...s, favorite: s.favorite ? 0 : 1 } : s));
+
+    try {
+      // 2. Local Storage Sync (for local items)
+      const t = shortcuts.find(s => s.id === id);
+      if (t && t.isLocal) {
+        const l = JSON.parse(localStorage.getItem('local_shortcuts') || '[]');
+        localStorage.setItem('local_shortcuts', JSON.stringify(l.map(s => s.id === id ? { ...s, favorite: s.favorite ? 0 : 1 } : s)));
+        return; // Local update done
+      }
+
+      // 3. Server Sync
+      const res = await fetch(`/api/favorite/${id}`, { method: 'POST' });
+      if (!res.ok) throw new Error("Failed to sync");
+      
+      // Success: Do nothing, UI is already correct.
+    } catch (err) {
+      // 4. Rollback on Error
+      setShortcuts(previousShortcuts);
+      alert(t('error_syncing_favorite') + ": " + err.message);
+    }
+  };
   const handleLinkClick=(id,u)=>{const t=shortcuts.find(s=>s.id===id);if(!t?.isLocal)fetch(`/api/click/${id}`,{method:'POST'});window.open(u,'_blank')};
   const handleEdit=(i,e)=>{e.stopPropagation();setFormData({...i,icon_url:i.icon_url||''});setShowAddModal(true)};
-  const handleLogin=e=>{e.preventDefault();if(loginCreds.username==='admin'&&loginCreds.password==='miniappadmin'){setIsAdmin(true);setShowLoginModal(false)}else setLoginError('Sai thông tin')};
+  const handleLogin=e=>{e.preventDefault();if(loginCreds.username==='admin'&&loginCreds.password==='miniappadmin'){setIsAdmin(true);setShowLoginModal(false)}else setLoginError(t('invalid_credentials'))};
   const handleImageUpload=e=>{const f=e.target.files[0];if(f){const r=new FileReader();r.onload=ev=>setFormData(p=>({...p,icon_url:ev.target.result}));r.readAsDataURL(f)}};
   const handleExportData=()=>{const d='data:text/json;charset=utf-8,'+encodeURIComponent(JSON.stringify({version:2,timestamp:new Date().toISOString(),shortcuts:shortcuts.filter(s=>!s.isLocal),labels:labelColors}));const a=document.createElement('a');a.href=d;a.download='backup.json';document.body.appendChild(a);a.click();a.remove()};
-  const handleImportData=e=>{const f=e.target.files[0];if(f){const r=new FileReader();r.onload=async ev=>{await fetch('/api/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(JSON.parse(ev.target.result))});alert("Import OK!");fetchData()};r.readAsText(f)}};
+  const handleImportData=e=>{const f=e.target.files[0];if(f){const r=new FileReader();r.onload=async ev=>{await fetch('/api/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(JSON.parse(ev.target.result))});alert(t('import_successful'));fetchData()};r.readAsText(f)}};
   const handleDragStart=(e,id)=>{setDraggingId(id);e.dataTransfer.effectAllowed='move';const iconEl=e.currentTarget.querySelector('[data-icon]');if(iconEl&&e.dataTransfer.setDragImage){const rect=iconEl.getBoundingClientRect();const clone=iconEl.cloneNode(true);clone.style.width=rect.width+'px';clone.style.height=rect.height+'px';clone.style.borderRadius='16px';clone.style.overflow='hidden';clone.style.position='absolute';clone.style.top='-1000px';clone.style.left='-1000px';clone.style.zIndex='9999';document.body.appendChild(clone);e.dataTransfer.setDragImage(clone,rect.width/2,rect.height/2);setTimeout(()=>{document.body.removeChild(clone)},0)}};
   const handleDragOver=e=>{e.preventDefault();e.dataTransfer.dropEffect='move'};
   const handleDrop=(e,targetId)=>{e.preventDefault();if(!draggingId||draggingId===targetId)return;setClientOrder(prev=>{const baseIds=filteredShortcuts.map(s=>s.id);let current=prev&&prev.length?prev.filter(id=>baseIds.includes(id)):baseIds.slice();baseIds.forEach(id=>{if(!current.includes(id))current.push(id)});const from=current.indexOf(draggingId);const to=current.indexOf(targetId);if(from===-1||to===-1)return prev;const next=current.slice();next.splice(from,1);next.splice(to,0,draggingId);localStorage.setItem('shortcut_order_'+tenant,JSON.stringify(next));return next});setDraggingId(null)};
@@ -165,7 +437,7 @@ export default function App(){
   
   // FIX: Sorting Logic now prioritizes explicit SortBy unless it is 'default'
   const filteredShortcuts=useMemo(()=>{
-    let r=shortcuts.filter(i=>{const t=searchTerm.trim().toLowerCase(),m=(!t||i.name.toLowerCase().includes(t))&&(!activeParentFilter||i.parent_label===activeParentFilter);if(!m)return false;if(activeChildFilter){const tags=(i.child_label||'').split(',').map(s=>s.trim());if(!tags.includes(activeChildFilter))return false}return true});
+    let r=shortcuts.filter(i=>{const t=debouncedSearchTerm.trim().toLowerCase(),m=(!t||i.name.toLowerCase().includes(t))&&(!activeParentFilter||i.parent_label===activeParentFilter);if(!m)return false;if(activeChildFilter){const tags=(i.child_label||'').split(',').map(s=>s.trim());if(!tags.includes(activeChildFilter))return false}return true});
     
     // First, always apply alpha or favorite sort as base
     r.sort((a,b)=>(b.favorite-a.favorite)||(a.name.localeCompare(b.name)));
@@ -187,7 +459,7 @@ export default function App(){
     }
 
     return r; // Fallback
-},[shortcuts,searchTerm,activeParentFilter,activeChildFilter,sortBy,clientOrder]);
+},[shortcuts,debouncedSearchTerm,activeParentFilter,activeChildFilter,sortBy,clientOrder]);
 
   useEffect(()=>{
     const calcItemsPerPage=()=>{if(!gridWrapperRef.current||!gridRef.current)return;const style=getComputedStyle(gridRef.current);const colCount=style.gridTemplateColumns.split(' ').length||1;const cardEl=gridRef.current.querySelector('[data-card]');const cardHeight=cardEl?cardEl.getBoundingClientRect().height:140;const wrapperRect=gridWrapperRef.current.getBoundingClientRect();const availableHeight=window.innerHeight-wrapperRect.top-80;const rows=Math.max(1,Math.floor(availableHeight/cardHeight));setItemsPerPage(Math.max(colCount*rows,colCount))};
@@ -201,7 +473,7 @@ export default function App(){
   const cardClass=darkMode?'bg-gray-800 border-gray-700 hover:border-blue-500':'bg-white border-[#D8D8D8] hover:border-[#009FB8]';
   const inputClass=darkMode?'bg-gray-800 border-gray-700':'bg-white border-[#D8D8D8]',modalClass=darkMode?'bg-gray-900 border-gray-700':'bg-white border-[#D8D8D8]';
   const isLastPage=currentPage===totalPages-1;
-  if(loading)return<div className={`min-h-screen flex items-center justify-center ${bgClass}`}><Activity className="w-8 h-8 animate-spin text-blue-500"/></div>;
+  if(loading)return<div className={`min-h-screen flex items-center justify-center ${bgClass}`}><span className="loader"></span></div>;
 
   // New Pagination Helpers
   const maxDots=6;
@@ -215,21 +487,91 @@ export default function App(){
 
   return (
     <div className={`min-h-screen font-light transition-all duration-300 bg-cover bg-center bg-no-repeat bg-fixed ${bgClass}`} style={{backgroundImage:bgImage?`url(${bgImage})`:'none',color:currentTextColor}}>
+      {/* Global Drag Overlay */}
+      {isDragging && (
+        <div 
+            className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center animate-in fade-in duration-200"
+            onDragOver={(e)=>{e.preventDefault(); e.dataTransfer.dropEffect = 'copy';}}
+            onDragLeave={(e)=>{
+                e.preventDefault();
+                // Avoid flickering when going over children by checking relatedTarget (mostly works)
+                // Or just simple close.
+                if (e.currentTarget.contains(e.relatedTarget)) return;
+                setIsDragging(false);
+            }}
+            onDrop={handleGlobalDrop}
+        >
+            <div className="w-4/5 h-4/5 border-4 border-dashed border-white/30 rounded-3xl flex flex-col items-center justify-center gap-4 bg-white/5 pointer-events-none">
+                <div className="bg-white/10 p-8 rounded-full animate-bounce">
+                    <Camera size={64} className="text-white"/>
+                </div>
+                <h2 className="text-3xl font-bold text-white tracking-wide">{t('drop_to_search') || "Drop Image to Search"}</h2>
+            </div>
+        </div>
+      )}
+
       {bgVideo&&<video className="fixed inset-0 w-full h-full object-cover -z-10" src={bgVideo} autoPlay loop muted playsInline/>}
       {bgEmbed&&<iframe className="fixed inset-0 w-full h-full -z-20 pointer-events-none" src={bgEmbed+(bgEmbed.includes('?')?'&':'?')+'autoplay=1&mute=1&loop=1&controls=0&playsinline=1'+(bgEmbed.match(/\/embed\/([^?]+)/)?'&playlist='+bgEmbed.match(/\/embed\/([^?]+)/)[1]:'')} title="Background" frameBorder="0" allow="autoplay; fullscreen"/>}
       <div className="min-h-screen w-full transition-colors duration-300" style={{backgroundColor:(bgImage||bgVideo||bgEmbed)?(darkMode?`rgba(0,0,0,${overlayOpacity})`:`rgba(255,255,255,${overlayOpacity})`):''}}>
         <div className="sticky top-0 z-30 w-full flex flex-col pt-4 px-4 gap-2 pointer-events-none">
-          <div className="pointer-events-auto w-full max-w-2xl mx-auto flex items-center justify-center gap-3 relative">
-            {/* CLOCK DESKTOP: Left of Search */}
-            <div className="hidden sm:block absolute left-[-150px] top-1/2 -translate-y-1/2">
+          <div className="pointer-events-auto w-full max-w-7xl mx-auto flex items-center justify-between gap-3 relative">
+            {/* CLOCK DESKTOP: Now responsive, on the left */}
+            <div className="hidden sm:block min-w-[120px]">
+              <React.Suspense fallback={<div className="h-8 w-24 bg-gray-200/20 rounded animate-pulse"/>}>
                 <Clock utcOffset={utcOffset} />
+              </React.Suspense>
             </div>
 
-            <div className="flex-1 flex items-center gap-2 min-w-0">
-               <div className="relative group w-full max-w-lg mx-auto transition-all"><Search className="absolute inset-y-0 left-0 pl-3 h-full w-7 opacity-50"/><input type="text" className={`block w-full pl-10 pr-3 py-2 border rounded-full text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-[#009FB8] ${inputClass} ${(bgImage||bgVideo||bgEmbed)?'bg-opacity-60 backdrop-blur-md':'bg-opacity-60'}`} style={{color:currentTextColor}} placeholder="Tìm kiếm..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)}/></div>
-               <button onClick={()=>setShowFilterPanel(!showFilterPanel)} className={`p-2 rounded-full shadow-sm border ${inputClass} ${(bgImage||bgVideo||bgEmbed)?'bg-opacity-80':''}`}><Filter size={18}/></button>
+            <div className="flex-1 flex items-center justify-center gap-2 max-w-2xl">
+
+               <div className="relative group/search w-full transition-all flex items-center bg-white dark:bg-gray-800 rounded-full border shadow-sm focus-within:ring-2 focus-within:ring-[#009FB8] overflow-hidden" style={{borderColor: darkMode?'#374151':'#D8D8D8'}}>
+                  <button 
+                    onClick={handleSearchSubmit} 
+                    className={`pl-3 pr-2 h-full opacity-50 hover:opacity-100 hover:text-[#009FB8] transition-colors cursor-pointer z-10`}
+                  >
+                     <Search size={18}/>
+                  </button>
+                  
+                  {searchPreview && (
+                    <div className="flex items-center gap-1 pl-1">
+                        <div className="relative group/preview">
+                            <img src={searchPreview} className="h-6 w-6 rounded object-cover border"/>
+                            <button onClick={clearSearchImage} className="absolute -top-1 -right-1 bg-gray-500 text-white rounded-full p-0.5 opacity-0 group-hover/preview:opacity-100 transition-opacity"><X size={8}/></button>
+                        </div>
+                    </div>
+                  )}
+
+                  <input 
+                    type="text" 
+                    className={`block w-full px-2 py-2 text-sm focus:outline-none bg-transparent ${(bgImage||bgVideo||bgEmbed)?'bg-opacity-60 backdrop-blur-md':''}`} 
+                    style={{color:currentTextColor}} 
+                    placeholder={searchPreview ? "Google Image Search..." : t('search_placeholder')} 
+                    value={searchTerm} 
+                    onChange={e=>setSearchTerm(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleSearchSubmit()}
+                  />
+
+                  {/* Image Upload Trigger */}
+                  <div className={`pr-1 opacity-0 group-hover/search:opacity-100 transition-opacity flex items-center ${searchPreview ? 'opacity-100' : ''}`}>
+                      <button 
+                        onClick={() => searchFileInputRef.current?.click()} 
+                        className="p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500"
+                        title="Search by Image"
+                      >
+                          <Camera size={16} />
+                      </button>
+                      <input type="file" ref={searchFileInputRef} className="hidden" accept="image/*" onChange={handleSearchImageSelect} />
+                  </div>
+
+               </div>
+               <React.Suspense fallback={<div className="w-9 h-9 bg-gray-200/50 rounded-full"/>}>
+                 <button onClick={()=>setShowFilterPanel(!showFilterPanel)} className={`p-2 rounded-full shadow-sm border ${inputClass} ${(bgImage||bgVideo||bgEmbed)?'bg-opacity-80':''}`}><Filter size={18}/></button>
+               </React.Suspense>
                <div className="flex items-center gap-1 bg-gray-200/50 dark:bg-gray-800/50 rounded-full p-1 backdrop-blur-sm"><button onClick={()=>setSortBy('default')} className={`p-1.5 rounded-full text-xs ${sortBy==='default'?'bg-white dark:bg-gray-700 shadow':'opacity-50'}`}><List size={14}/></button><button onClick={()=>setSortBy('alpha')} className={`p-1.5 rounded-full text-xs ${sortBy==='alpha'?'bg-white dark:bg-gray-700 shadow':'opacity-50'}`}>Aa</button></div>
             </div>
+
+            {/* Spacer for potential right-side elements or keeping it centered */}
+             <div className="hidden sm:block min-w-[120px]"></div>
           </div>
           
           {/* PAGINATION & CLOCK MOBILE */}
@@ -237,7 +579,9 @@ export default function App(){
             <div className="pointer-events-auto w-full max-w-2xl mx-auto flex justify-center mb-1 relative">
                {/* CLOCK MOBILE: Left of Pagination */}
                <div className="sm:hidden absolute left-6 top-1/2 -translate-y-1/2">
+                <React.Suspense fallback={null}>
                  <Clock utcOffset={utcOffset} className="text-sm" />
+                </React.Suspense>
                </div>
 
               <div className="flex items-center gap-3 px-3 py-1.5 rounded-full bg-gray-100/80 dark:bg-gray-800/80 border border-gray-300/60 dark:border-gray-700/60 backdrop-blur-sm shadow-sm">
@@ -245,7 +589,7 @@ export default function App(){
                   isEditingPage?(
                     <input autoFocus className="w-12 bg-transparent border-b border-blue-500 text-center text-[11px] outline-none" value={pageInput} onChange={e=>setPageInput(e.target.value)} onBlur={()=>{setIsEditingPage(false);setPageInput('')}} onKeyDown={e=>{if(e.key==='Enter'){const p=parseInt(pageInput)-1;if(!isNaN(p)&&p>=0&&p<totalPages)setCurrentPage(p);setIsEditingPage(false)}}}/>
                   ):(
-                    <span className="text-[11px] opacity-70 hover:opacity-100 cursor-pointer font-medium min-w-[60px] text-center" onClick={()=>{setIsEditingPage(true);setPageInput(String(currentPage+1))}} title="Nhập số trang">Trang {currentPage+1}/{totalPages}</span>
+                    <span className="text-[11px] opacity-70 hover:opacity-100 cursor-pointer font-medium min-w-[60px] text-center" onClick={()=>{setIsEditingPage(true);setPageInput(String(currentPage+1))}} title={t('enter_page_number')}>{t('page')} {currentPage+1}/{totalPages}</span>
                   )
                 )}
                 <div className="flex items-center gap-1.5">
@@ -255,26 +599,36 @@ export default function App(){
             </div>
           )}
 
-          <FilterPanel 
-            isOpen={showFilterPanel}
-            activeParentFilter={activeParentFilter}
-            setActiveParentFilter={setActiveParentFilter}
-            activeChildFilter={activeChildFilter}
-            setActiveChildFilter={setActiveChildFilter}
-            uniqueParents={uniqueParents}
-            uniqueChildren={uniqueChildren}
-            labelColors={labelColors}
-            modalClass={modalClass}
-            getContrastYIQ={getContrastYIQ}
-          />
+          <React.Suspense fallback={null}>
+            <FilterPanel 
+              isOpen={showFilterPanel}
+              activeParentFilter={activeParentFilter}
+              setActiveParentFilter={setActiveParentFilter}
+              activeChildFilter={activeChildFilter}
+              setActiveChildFilter={setActiveChildFilter}
+              uniqueParents={uniqueParents}
+              uniqueChildren={uniqueChildren}
+              labelColors={labelColors}
+              modalClass={modalClass}
+              getContrastYIQ={getContrastYIQ}
+            />
+          </React.Suspense>
         </div>
         
         {/* GRID */}
-        <div ref={gridWrapperRef} className="max-w-7xl mx-auto px-6 pb-32 pt-8 min-h-[60vh]" style={{overflow:"hidden"}} onWheel={e=>{e.preventDefault();if(e.deltaY>0||e.deltaX>0)goNext();else goPrev()}} onTouchStart={e=>setTouchStartX(e.touches[0].clientX)} onTouchMove={e=>e.preventDefault()} onTouchEnd={e=>{if(touchStartX===null)return;const d=e.changedTouches[0].clientX-touchStartX;if(Math.abs(d)>50){if(d<0)goNext();else goPrev()}setTouchStartX(null)}}>
+        <div 
+            ref={gridWrapperRef} 
+            className="max-w-7xl mx-auto px-6 pb-32 pt-8 min-h-[60vh] outline-none" 
+            style={{overflow:"hidden"}} 
+            onWheel={e=>{e.preventDefault();if(e.deltaY>0||e.deltaX>0)goNext();else goPrev()}} 
+            onTouchStart={e=>setTouchStartX(e.touches[0].clientX)} 
+            onTouchMove={e=>e.preventDefault()} 
+            onTouchEnd={e=>{if(touchStartX===null)return;const d=e.changedTouches[0].clientX-touchStartX;if(Math.abs(d)>50){if(d<0)goNext();else goPrev()}setTouchStartX(null)}}
+        >
           <div ref={gridRef} className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-4 justify-items-center">
             {pagedShortcuts.map(i=>(
+              <React.Suspense key={i.id} fallback={<div className="w-full h-32 rounded-xl bg-gray-100 dark:bg-gray-800 animate-pulse"/>}>
               <ShortcutCard 
-                key={i.id}
                 item={i}
                 isAdmin={isAdmin}
                 handleDragStart={handleDragStart}
@@ -292,26 +646,31 @@ export default function App(){
                 darkMode={darkMode}
                 getContrastYIQ={getContrastYIQ}
               />
+              </React.Suspense>
             ))}
             {isLastPage&&(
-              <div className="flex flex-col items-center w-full max-w-[100px] cursor-pointer group" onClick={()=>{resetForm();setShowAddModal(true)}}><div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all mb-2 backdrop-blur-sm bg-white/10 dark:bg-black/10 hover:bg-emerald-500/10`}><Plus size={24} className="opacity-50 font-light"/></div><span className="text-xs font-light opacity-50">Thêm App</span></div>
+              <div className="flex flex-col items-center w-full max-w-[100px] cursor-pointer group" onClick={()=>{resetForm();setShowAddModal(true)}}><div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all mb-2 backdrop-blur-sm bg-white/10 dark:bg-black/10 hover:bg-emerald-500/10`}><Plus size={24} className="opacity-50 font-light"/></div><span className="text-xs font-light opacity-50">{t('add_app')}</span></div>
             )}
           </div>
         </div>
 
-        <div className="fixed bottom-6 right-6 z-50 pointer-events-auto opacity-0 hover:opacity-100 transition-opacity duration-300">
-          <div className="group/menu flex items-center justify-end gap-2 p-2 rounded-full hover:bg-white/20 hover:backdrop-blur-md transition-all">
-            <div className="flex items-center gap-2">
-            {(bgImage||bgVideo||bgEmbed)&&<div className="flex items-center gap-1 mr-2 bg-black/40 rounded-full px-2 py-1 backdrop-blur-sm"><span className="text-[10px] text-white/90 font-bold">BG</span><input type="range" min="0" max="0.9" step="0.1" value={overlayOpacity} onChange={e=>{const v=parseFloat(e.target.value);setOverlayOpacity(v);localStorage.setItem('overlayOpacity',v);if(isAdmin)saveConfig('overlay_opacity',v)}} className="w-16 h-1 accent-[#009FB8] cursor-pointer"/></div>}
-            <button onClick={()=>setDarkMode(!darkMode)} className={`p-2 rounded-full border shadow-sm ${inputClass} ${(bgImage||bgVideo||bgEmbed)?'bg-opacity-80':''}`}>{darkMode?<Sun size={18} className="text-yellow-400"/>:<Moon size={18} className="text-gray-600"/>}</button>
-            <div className={`flex items-center gap-1 p-1 rounded-full border shadow-lg ${inputClass} bg-opacity-80 backdrop-blur relative`}>
-              
-              {/* NEW PALETTE POPOVER TRIGGER */}
+        <div className="fixed bottom-6 right-6 z-50 pointer-events-auto opacity-0 hover:opacity-100 transition-opacity duration-300 max-w-[calc(100vw-3rem)]">
+          <div className={`group/menu flex flex-wrap items-center justify-end gap-2 p-2 rounded-3xl border shadow-lg ${inputClass} bg-opacity-90 backdrop-blur-md transition-all`}>
+            
+            {/* BG Control */}
+            {(bgImage||bgVideo||bgEmbed)&&<div className="flex items-center gap-1 bg-black/40 rounded-full px-2 py-1 backdrop-blur-sm"><span className="text-[10px] text-white/90 font-bold">BG</span><input type="range" min="0" max="0.9" step="0.1" value={overlayOpacity} onChange={e=>{const v=parseFloat(e.target.value);setOverlayOpacity(v);localStorage.setItem('overlayOpacity',v);if(isAdmin)saveConfig('overlay_opacity',v)}} className="w-16 h-1 accent-[#009FB8] cursor-pointer"/></div>}
+            
+            {/* Dark Mode */}
+            <button onClick={()=>setDarkMode(!darkMode)} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full">{darkMode?<Sun size={18} className="text-yellow-400"/>:<Moon size={18} className="text-gray-600"/>}</button>
+            
+            <div className="w-px h-4 bg-gray-300 mx-1"></div>
+
+              {/* Text Color Picker */}
               <div className="relative z-50">
                 <button 
                   onClick={() => setShowColorPicker(!showColorPicker)}
                   className={`color-picker-trigger p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full ${showColorPicker ? 'bg-blue-100 dark:bg-blue-900 text-blue-500' : ''}`} 
-                  title="Màu chữ"
+                  title={t('text_color')}
                 >
                   <Palette size={16}/>
                 </button>
@@ -320,14 +679,12 @@ export default function App(){
                     <div className="color-picker-popover absolute bottom-full mb-3 left-1/2 -translate-x-1/2 p-3 rounded-xl bg-white dark:bg-gray-800 shadow-xl border border-gray-200 dark:border-gray-700 min-w-[120px] flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-2">
                         <div className="grid grid-cols-[auto_1fr] gap-2 items-center">
                             <input type="color" value={lightTextColor} onChange={e=>handleTextColorChange('light',e.target.value)} className="w-6 h-6 p-0 border-none bg-transparent cursor-pointer rounded-full overflow-hidden"/>
-                            <span className="text-[10px] font-medium opacity-70">Text Light</span>
+                            <span className="text-[10px] font-medium opacity-70">{t('text_light')}</span>
                         </div>
                         <div className="grid grid-cols-[auto_1fr] gap-2 items-center">
                              <input type="color" value={darkTextColor} onChange={e=>handleTextColorChange('dark',e.target.value)} className="w-6 h-6 p-0 border-none bg-transparent cursor-pointer rounded-full overflow-hidden"/>
-                             <span className="text-[10px] font-medium opacity-70">Text Dark</span>
+                             <span className="text-[10px] font-medium opacity-70">{t('text_dark')}</span>
                         </div>
-                        {/* Little triangle arrow */}
-                        <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-white dark:border-t-gray-800"></div>
                     </div>
                 )}
               </div>
@@ -336,30 +693,45 @@ export default function App(){
 
               {/* Media Controls */}
               <button onClick={()=>bgInputRef.current?.click()} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"><ImageIcon size={16}/></button><input type="file" ref={bgInputRef} className="hidden" accept="image/*,video/*" onChange={handleBgUpload}/>
-              <div className="hidden sm:flex items-center gap-1 ml-1"><input type="text" placeholder="Link ảnh/GIF" className={`px-2 py-1 text-[11px] rounded-full border max-w-[120px] ${inputClass}`} value={bgUrlInput} onChange={e=>setBgUrlInput(e.target.value)}/><button type="button" onClick={applyBgUrl} className="px-2 py-1 text-[11px] rounded-full border border-gray-400/50 hover:bg-gray-200 dark:hover:bg-gray-700">Set</button></div>
+              <div className="hidden sm:flex items-center gap-1 ml-1"><input type="text" placeholder={t('image_gif_link')} className={`px-2 py-1 text-[11px] rounded-full border max-w-[120px] ${inputClass}`} value={bgUrlInput} onChange={e=>setBgUrlInput(e.target.value)}/><button type="button" onClick={applyBgUrl} className="px-2 py-1 text-[11px] rounded-full border border-gray-400/50 hover:bg-gray-200 dark:hover:bg-gray-700">{t('set')}</button></div>
               
+              {/* Language Switcher */}
+              <div className="relative group/lang ml-1">
+                 <select 
+                   value={lang} 
+                   onChange={(e)=>setLang(e.target.value)} 
+                   className={`appearance-none bg-black/5 dark:bg-white/10 text-xs font-bold uppercase rounded-xl px-2 py-1.5 pr-5 cursor-pointer outline-none hover:bg-black/10 dark:hover:bg-white/20 transition-all text-gray-700 dark:text-gray-300 border-none`}
+                 >
+                   {['vn','en','de','kz','ka','ru'].map(l=>(
+                     <option key={l} value={l} className="text-black">{l.toUpperCase()}</option>
+                   ))}
+                 </select>
+                 <div className="absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none opacity-50">
+                   <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+                 </div>
+              </div>
+
               {isAdmin&&(<>
+                 <div className="w-px h-4 bg-gray-300 mx-1"></div>
                 <button onClick={fetchInsights} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-orange-500"><ChartIcon size={16}/></button>
                 <button onClick={handleForceSync} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-purple-500" title="Đồng bộ Client"><RefreshCw size={16}/></button>
-                <div className="w-px h-4 bg-gray-300 mx-1"></div>
                 <button onClick={handleExportData} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-blue-500"><Download size={16}/></button>
                 <button onClick={()=>importInputRef.current?.click()} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-green-500"><FileUp size={16}/></button>
                 <input type="file" ref={importInputRef} className="hidden" accept=".json" onChange={handleImportData}/>
-                <button onClick={handleClearMedia} className="p-1.5 hover:bg-red-100 dark:hover:bg-red-900 rounded-full text-red-500" title="Xóa nền"><Trash2 size={16}/></button>
                 <div className="w-px h-4 bg-gray-300 mx-1"></div>
-                <button onClick={()=>setShowSettingsModal(true)} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"><Settings size={16}/></button>
+                <button onClick={()=>setShowSettingsModal(true)} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full" title={t('app_config')}><Settings size={16}/></button>
                 <button onClick={()=>setIsAdmin(false)} className="p-1.5 hover:bg-red-100 dark:hover:bg-red-900 rounded-full text-red-500"><LogOut size={16}/></button>
               </>)}
               {!isAdmin&&(<>
+                <div className="w-px h-4 bg-gray-300 mx-1"></div>
                 <button onClick={handleClearMedia} className="p-2 hover:bg-red-100 dark:hover:bg-red-900 rounded-full text-red-500" title="Xóa nền"><Trash2 size={16}/></button>
                 {localStorage.getItem('custom_bg')&&<button onClick={handleResetBg} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-orange-500"><RotateCcw size={16}/></button>}
-                <button onClick={()=>setShowLoginModal(true)} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"><Settings size={18}/></button>
+                <button onClick={()=>setShowLoginModal(true)} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full" title={t('admin_login')}><Key size={18}/></button>
               </>)}
-            </div></div>
-            <div className="w-10 h-10 flex items-center justify-center bg-white/20 backdrop-blur-md rounded-full border border-white/30 text-white shadow-lg cursor-pointer group-hover/menu:hidden absolute bottom-0 right-0 pointer-events-none"><Settings size={20} className="animate-spin-slow"/></div>
           </div>
         </div>
         
+        <React.Suspense fallback={null}>
         <InsightsModal 
           isOpen={showInsightsModal} 
           onClose={() => setShowInsightsModal(false)}
@@ -368,7 +740,9 @@ export default function App(){
           onExportSummary={handleExportSummary}
           modalClass={modalClass}
         />
+        </React.Suspense>
 
+        <React.Suspense fallback={null}>
         <LoginModal 
           isOpen={showLoginModal}
           onClose={() => setShowLoginModal(false)}
@@ -379,7 +753,9 @@ export default function App(){
           modalClass={modalClass}
           inputClass={inputClass}
         />
+        </React.Suspense>
 
+        <React.Suspense fallback={null}>
         <SettingsModal
           isOpen={showSettingsModal}
           onClose={() => setShowSettingsModal(false)}
@@ -388,7 +764,9 @@ export default function App(){
           modalClass={modalClass}
           inputClass={inputClass}
         />
+        </React.Suspense>
 
+        <React.Suspense fallback={null}>
         <AddEditModal 
           isOpen={showAddModal}
           onClose={() => setShowAddModal(false)}
@@ -402,6 +780,17 @@ export default function App(){
           darkMode={darkMode}
           isEdit={!!formData.id}
         />
+        </React.Suspense>
+        <React.Suspense fallback={null}>
+        <ConfirmDialog
+          isOpen={confirmState.isOpen}
+          message={confirmState.message}
+          onConfirm={confirmState.onConfirm}
+          onCancel={() => setConfirmState({ ...confirmState, isOpen: false })}
+          confirmText={t('yes')}
+          cancelText={t('no')}
+        />
+        </React.Suspense>
       </div>
     </div>
   );

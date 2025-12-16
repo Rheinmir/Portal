@@ -9,20 +9,22 @@ This document outlines a technical review of the `shortcut-manager-sqlite-server
 - **[CRITICAL] Insights Crash**: The variable `chartColors` was undefined in the `App.jsx` Insights modal, causing the entire React tree to unmount (White Screen of Death). *Status: Fixed.*
 
 ### 2. Code Quality & Maintainability
-- **Monolithic `App.jsx`**: The entire frontend logic resides in a single file (~40KB). This makes it extremely difficult to debug, test, or add new features.
-  - **Recommendation**: Split components into `components/ShortcutCard.jsx`, `components/InsightsModal.jsx`, `components/AdminPanel.jsx`, etc.
-- **Obfuscated/Minified Server Code**: `server.js` is written in a compressed, one-line style (e.g., `const ensureColumn=(t,d)=>{...}`). This is hostile to developers and hard to debug.
-  - **Recommendation**: Refactor into a standard Node.js structure with proper formatting, meaningful variable names, and separate route handlers.
+- **[RESOLVED] Monolithic `App.jsx`**: The frontend logic has been significantly refactored.
+  - Major components (`ShortcutCard`, `InsightsModal`, `FilterPanel`, `Clock`, `AdminModals`) have been extracted to `src/components/`.
+  - `App.jsx` now acts as a composition layer using `React.lazy` for efficient loading.
+- **Obfuscated/Minified Server Code**: `server.js` remains improved but could still benefit from further modularization if backend complexity grows.
 
 ### 3. Security
-- **Hardcoded Credentials**: Admin credentials (`admin` / `miniappadmin`) are hardcoded in the database initialization logic.
-  - **Risk**: Anyone with access to the source code knows the default password.
-  - **Recommendation**: Use environment variables (`.env`) for secrets and force a password change on first login.
-- **Input Validation**: The specialized "one-liner" validation logic is fragile.
+- **Hardcoded Credentials**: Admin credentials (`admin` / `miniappadmin`) are hardcoded.
+  - **Risk**: Low for personal local usage, but recommended to change for exposed instances.
+  - **Recommendation**: Use environment variables (`.env`) for secrets.
 
 ### 4. Performance
-- **Large Re-renders**: Because state is global in `App.jsx`, typing in the search box likely triggers re-renders for the entire application, including the heavy grid of shortcuts.
-  - **Recommendation**: Memoize heavy components (`ShortcutGrid`) and push state down to where it is needed.
+- **[RESOLVED] Large Re-renders**:
+  - **Debouncing**: Search input is now debounced (300ms) to prevent excessive filtering during typing.
+  - **Memoization**: `useMemo` is heavily used for filtering and sorting logic.
+  - **Lazy Loading**: All valid heavy components and modals are code-split using `React.lazy`, reducing the initial bundle size.
+  - **Build Optimization**: Vite config now uses manual chunk splitting to separate `vendor` and `ui` libraries.
 
 ## Summary
 The project works for personal use but requires significant refactoring for production readiness or team collaboration. The immediate strict dependency on a single large file is the biggest bottleneck for future development.

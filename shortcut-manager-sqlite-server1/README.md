@@ -8,6 +8,7 @@ A self-hosted, personal dashboard for managing web shortcuts. Features a modern 
 - **Insights**: Track click history, top apps, and usage trends.
 - **Theming**: Dark mode support, custom background images/videos.
 - **SQLite Database**: Single-file database for easy backup and migration.
+- **Performance Optimized**: Code splitting, lazy loading, and search debouncing for a snappy experience on any device.
 
 ## Installation
 

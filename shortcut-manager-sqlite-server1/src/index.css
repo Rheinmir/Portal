@@ -1,2 +1,105 @@
 @import url('https://fonts.googleapis.com/css2?family=Lexend+Deca:wght@100..900&display=swap');
-@tailwind base; @tailwind components; @tailwind utilities; body { margin: 0; min-height: 100vh; } .dark { color-scheme: dark; }
+@import url('https://fonts.googleapis.com/css2?family=Lexend+Deca:wght@200;300;400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: 'Lexend Deca', sans-serif;
+  font-weight: 300; /* Light/Thin feel */
+}
+
+.dark { color-scheme: dark; }
+
+/* Custom Scrollbar for cleaner look - Global */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent; 
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.5); 
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(156, 163, 175, 0.8); 
+}
+
+/* Auto-hiding Scrollbar Utility */
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+.custom-scrollbar:hover::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.5);
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(156, 163, 175, 0.8);
+}
+
+/* Custom Loader */
+.loader {
+  width: 16px;
+  height: 16px;
+  box-shadow: 0 30px, 0 -30px;
+  border-radius: 4px;
+  background: currentColor;
+  display: block;
+  margin: -50px auto 0;
+  position: relative;
+  color: #0F2F55; /* Light mode default */
+  transform: translate(-30px, 30px);
+  box-sizing: border-box;
+  animation: animloader 2s ease infinite;
+}
+
+.dark .loader {
+  color: #FFF; /* Dark mode override */
+}
+
+.loader::after,
+.loader::before {
+  content: '';  
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  box-shadow: 0 30px, 0 -30px;
+  border-radius: 4px;
+  background: currentColor;
+  position: absolute;
+  left: 30px;
+  top: 0;
+  animation: animloader 2s 0.2s ease infinite;
+}
+.loader::before {
+  animation-delay: 0.4s;
+  left: 60px;
+}
+
+@keyframes animloader {
+  0% {
+    top: 0;
+    opacity: 1;
+  }
+  50% {
+    top: 30px;
+    opacity: 0.2;
+  }
+  100% {
+    top: 0;
+    opacity: 1;
+  }
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+.animate-in {
+  animation: fadeIn 0.2s ease-out forwards;
+}
