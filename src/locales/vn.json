@@ -62,5 +62,7 @@
   "error_deleting": "Lỗi xóa",
   "error_syncing_favorite": "Lỗi đồng bộ yêu thích",
   "invalid_credentials": "Sai thông tin đăng nhập",
-  "import_successful": "Nhập dữ liệu thành công!"
+  "import_successful": "Nhập dữ liệu thành công!",
+  "group_by_tag": "Nhóm theo thẻ",
+  "uncategorized": "Chưa phân loại"
 }
