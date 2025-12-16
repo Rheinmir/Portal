@@ -158,6 +158,7 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState(0),
     [touchStartX, setTouchStartX] = useState(null),
     [itemsPerPage, setItemsPerPage] = useState(DEFAULT_ITEMS_PER_PAGE);
+  const [colCount, setColCount] = useState(6); // Default estimation
   const [clientOrder, setClientOrder] = useState(() => {
       const r = localStorage.getItem("shortcut_order_" + tenant);
       return r ? JSON.parse(r) : [];
@@ -317,13 +318,15 @@ export default function App() {
             DEFAULT_DARK_TEXT
         );
         const localOpStr = localStorage.getItem("overlayOpacity");
-        const op =
-          localOpStr != null
-            ? Number(localOpStr)
-            : c.overlay_opacity != null
-            ? Number(c.overlay_opacity)
-            : 0.5;
-        setOverlayOpacity(isNaN(op) ? 0.5 : op);
+        if (localOpStr != null) {
+          const op = Number(localOpStr);
+          setOverlayOpacity(isNaN(op) ? 0.5 : op);
+        } else if (c.overlay_opacity != null) {
+          const op = Number(c.overlay_opacity);
+          setOverlayOpacity(isNaN(op) ? 0.5 : op);
+        } else {
+          setOverlayOpacity(0.5);
+        }
         const localDarkStr = localStorage.getItem("darkMode");
         if (localDarkStr != null) setDarkMode(localDarkStr === "true");
         else {
@@ -1002,7 +1005,10 @@ export default function App() {
       const wrapperRect = gridWrapperRef.current.getBoundingClientRect();
       const availableHeight = window.innerHeight - wrapperRect.top - 80;
       const rows = Math.max(1, Math.floor(availableHeight / cardHeight));
-      setItemsPerPage(Math.max(colCount * rows, colCount));
+      const cols = colCount; // from style above
+
+      setColCount(cols);
+      setItemsPerPage(Math.max(cols * rows, cols));
     };
     calcItemsPerPage();
     window.addEventListener("resize", calcItemsPerPage);
@@ -1047,57 +1053,63 @@ export default function App() {
     });
 
     const pages = [];
-    let currentPageItems = [];
+
+    // Weighted Bucket Logic
+    // Each Item Cost = 1
+    // Each Group Overhead Cost = colCount (approx 1 row height for header/padding)
+    const MAX_CAPACITY = itemsPerPage;
+    const GROUP_OVERHEAD = colCount;
+
+    let currentCapacity = 0;
+    let currentPageBucket = [];
+    // Helper to commit page
+    const commitPage = () => {
+      if (currentPageBucket.length) pages.push(currentPageBucket);
+      currentPageBucket = [];
+      currentCapacity = 0;
+    };
 
     sortedKeys.forEach((key) => {
-      const groupItems = groups[key];
+      let groupItems = [...groups[key]];
 
-      // Scenario A: Fits in current page
-      if (currentPageItems.length + groupItems.length <= itemsPerPage) {
-        currentPageItems.push(...groupItems);
-      }
-      // Scenario B: Smart Pagination
-      else {
-        // If the group wraps but CAN fit on a single page, push to next page
-        if (groupItems.length <= itemsPerPage) {
-          if (currentPageItems.length > 0) {
-            pages.push(currentPageItems);
-            currentPageItems = [];
-          }
-          currentPageItems.push(...groupItems);
+      while (groupItems.length > 0) {
+        // 1. Calculate Cost to add THIS group (or remainder of it) to CURRENT page
+        // We need to pay the Overhead Tax immediately if we start a group on this page
+        const overhead =
+          currentCapacity + GROUP_OVERHEAD > MAX_CAPACITY && currentCapacity > 0
+            ? 0 // Can't fit overhead even? Commit page first.
+            : GROUP_OVERHEAD;
+
+        if (currentCapacity + overhead > MAX_CAPACITY) {
+          commitPage();
+          continue; // Retry on new page
         }
-        // Scenario C: Group is huge > Page, MUST split
-        else {
-          let remaining = [...groupItems];
 
-          // Fill current page first with as much as possible
-          const spaceInCurrent = itemsPerPage - currentPageItems.length;
-          if (spaceInCurrent > 0) {
-            currentPageItems.push(...remaining.splice(0, spaceInCurrent));
-            pages.push(currentPageItems);
-            currentPageItems = [];
-          } else {
-            if (currentPageItems.length) pages.push(currentPageItems);
-            currentPageItems = [];
-          }
+        // Now we have paid (or willing to pay) overhead. How many items fit?
+        const availableSlots = MAX_CAPACITY - (currentCapacity + overhead);
 
-          // Now fill completely new pages
-          while (remaining.length > 0) {
-            if (remaining.length <= itemsPerPage) {
-              currentPageItems = remaining; // Start new current page with remainder
-              remaining = [];
-            } else {
-              pages.push(remaining.splice(0, itemsPerPage));
-            }
-          }
+        if (availableSlots <= 0) {
+          // Should not happen if overhead < max_capacity, but safety:
+          commitPage();
+          continue;
+        }
+
+        // Take as many as fit
+        const chunk = groupItems.splice(0, availableSlots);
+        currentPageBucket.push(...chunk);
+        currentCapacity += overhead + chunk.length;
+
+        // If we filled the page exactly, commit
+        if (currentCapacity >= MAX_CAPACITY) {
+          commitPage();
         }
       }
     });
 
-    if (currentPageItems.length > 0) pages.push(currentPageItems);
+    commitPage(); // Final flush
 
     return pages.length ? pages : [[]];
-  }, [filteredShortcuts, itemsPerPage, isGrouped, t]);
+  }, [filteredShortcuts, itemsPerPage, isGrouped, t, colCount]);
 
   const totalPages = Math.max(1, partitionedPages.length);
 
