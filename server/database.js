@@ -101,4 +101,20 @@ export const initDatabase = () => {
       );
     console.log("Default admin created (admin/miniappadmin)");
   }
+
+  // Cleanup Outdated Data
+  try {
+    console.log("Running database cleanup...");
+    // Delete click_logs older than 30 days
+    const deletedLogs = db.prepare("DELETE FROM click_logs WHERE clicked_at < date('now', '-30 day')").run();
+    if (deletedLogs.changes > 0) {
+      console.log(`Removed ${deletedLogs.changes} outdated click logs.`);
+    }
+
+    // Optimize DB size
+    db.pragma('optimize'); 
+  } catch (err) {
+    console.error("Database cleanup warning:", err.message);
+    // Swallow error to prevent crash
+  }
 };

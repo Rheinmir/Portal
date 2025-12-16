@@ -250,31 +250,27 @@ export default function App(){
     }
   };
 
-  const handleSearchSubmit = () => {
+  const handleSearchSubmit = async () => {
     if (searchFile) {
-        // Google Image Search via Form Submit (Lens)
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = 'https://lens.google.com/upload?ep=ccm';
-        form.enctype = 'multipart/form-data';
-        form.target = '_blank';
-        
-        const fileInput = document.createElement('input');
-        fileInput.type = 'file';
-        fileInput.name = 'encoded_image';
-        
-        const dataTransfer = new DataTransfer();
-        dataTransfer.items.add(searchFile);
-        fileInput.files = dataTransfer.files;
-        
-        form.appendChild(fileInput);
-        document.body.appendChild(form);
-        form.submit();
-        document.body.removeChild(form);
-        
-        // Optional: clear after search?
-        // setSearchFile(null); 
-        // setSearchPreview(null);
+        // Direct upload yields 403 (CORS/Origin check by Google).
+        // Workaround: Copy to clipboard and open Lens.
+        try {
+            // Need to create a proper ClipboardItem with the blob
+            const type = searchFile.type;
+            const blob = searchFile; // File is a specific kind of Blob
+            await navigator.clipboard.write([
+                new ClipboardItem({
+                    [type]: blob
+                })
+            ]);
+            window.open('https://lens.google.com/', '_blank');
+            alert(t('image_copied_hint'));
+        } catch (err) {
+            console.error(err);
+            // Fallback for types or context issues
+            alert(t('error_copy_image') + ": " + err.message);
+            window.open('https://lens.google.com/', '_blank');
+        }
     } else if (searchTerm.trim()) {
         window.open('https://www.google.com/search?q=' + encodeURIComponent(searchTerm), '_blank');
     }
