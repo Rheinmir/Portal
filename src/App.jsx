@@ -1025,7 +1025,7 @@ export default function App() {
   const partitionedPages = useMemo(() => {
     if (!itemsPerPage) return [];
 
-    // Default / Ungrouped behavior: simple slice
+    // Default / Ungrouped behavior
     if (!isGrouped) {
       const pages = [];
       for (let i = 0; i < filteredShortcuts.length; i += itemsPerPage) {
@@ -1034,8 +1034,7 @@ export default function App() {
       return pages.length ? pages : [[]];
     }
 
-    // Grouped Behavior: Smart Pagination
-    // 1. Group items preserve order
+    // Grouped Behavior
     const groups = {};
     const uncategorizedKey = t("uncategorized") || "Other";
 
@@ -1045,7 +1044,6 @@ export default function App() {
       groups[key].push(item);
     });
 
-    // 2. Sort Groups
     const sortedKeys = Object.keys(groups).sort((a, b) => {
       if (a === uncategorizedKey) return 1;
       if (b === uncategorizedKey) return -1;
@@ -1053,16 +1051,12 @@ export default function App() {
     });
 
     const pages = [];
-
-    // Weighted Bucket Logic
-    // Each Item Cost = 1
-    // Each Group Overhead Cost = colCount (approx 1 row height for header/padding)
     const MAX_CAPACITY = itemsPerPage;
     const GROUP_OVERHEAD = colCount;
 
     let currentCapacity = 0;
     let currentPageBucket = [];
-    // Helper to commit page
+
     const commitPage = () => {
       if (currentPageBucket.length) pages.push(currentPageBucket);
       currentPageBucket = [];
@@ -1071,43 +1065,59 @@ export default function App() {
 
     sortedKeys.forEach((key) => {
       let groupItems = [...groups[key]];
+      // Flag to track if we have already paid the overhead for this group on the *current* page
+      // Actually, since we process groupItems in a loop, each iteration is a "chunk" or "whole".
+      // We only pay overhead once per page for a group.
+
+      // If the entire group fits on a fresh page AND it doesn't fit on the current partial page,
+      // we should prefer to push it to the fresh page.
+
+      const totalCostIfFresh = GROUP_OVERHEAD + groupItems.length;
+
+      // Check if we should push to next page immediately
+      if (currentCapacity > 0) {
+        const fitsCurrent = currentCapacity + totalCostIfFresh <= MAX_CAPACITY;
+        const fitsFresh = totalCostIfFresh <= MAX_CAPACITY;
+
+        // If it doesn't fit current, but FITS a fresh page, push it.
+        if (!fitsCurrent && fitsFresh) {
+          commitPage();
+        }
+        // If it doesn't fit EITHER (huge group), or fits BOTH, or fits Current, we proceed to fill logic.
+      }
 
       while (groupItems.length > 0) {
-        // 1. Calculate Cost to add THIS group (or remainder of it) to CURRENT page
-        // We need to pay the Overhead Tax immediately if we start a group on this page
-        const overhead =
-          currentCapacity + GROUP_OVERHEAD > MAX_CAPACITY && currentCapacity > 0
-            ? 0 // Can't fit overhead even? Commit page first.
-            : GROUP_OVERHEAD;
+        // Try to fit on current page
+        // Overhead is required if we are starting a block for this group on this page.
+        // (In this loop, we always correspond to a block).
 
-        if (currentCapacity + overhead > MAX_CAPACITY) {
-          commitPage();
-          continue; // Retry on new page
-        }
+        const slotsRemaining = MAX_CAPACITY - currentCapacity;
 
-        // Now we have paid (or willing to pay) overhead. How many items fit?
-        const availableSlots = MAX_CAPACITY - (currentCapacity + overhead);
-
-        if (availableSlots <= 0) {
-          // Should not happen if overhead < max_capacity, but safety:
+        // Do we have space for even the header?
+        if (slotsRemaining < GROUP_OVERHEAD + 1) {
+          // Require at least 1 item + header
           commitPage();
           continue;
         }
 
-        // Take as many as fit
-        const chunk = groupItems.splice(0, availableSlots);
-        currentPageBucket.push(...chunk);
-        currentCapacity += overhead + chunk.length;
+        // We have space for header + at least 1 item.
+        // Pay tax
+        const availableForItems = slotsRemaining - GROUP_OVERHEAD;
 
-        // If we filled the page exactly, commit
+        // Take what we can
+        const countToTake = Math.min(groupItems.length, availableForItems);
+
+        const chunk = groupItems.splice(0, countToTake);
+        currentPageBucket.push(...chunk);
+        currentCapacity += GROUP_OVERHEAD + chunk.length;
+
         if (currentCapacity >= MAX_CAPACITY) {
           commitPage();
         }
       }
     });
 
-    commitPage(); // Final flush
-
+    commitPage();
     return pages.length ? pages : [[]];
   }, [filteredShortcuts, itemsPerPage, isGrouped, t, colCount]);
 
