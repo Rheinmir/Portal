@@ -1020,6 +1020,7 @@ export default function App() {
     bgVideo,
     bgEmbed,
     isGrouped,
+    showFilterPanel,
   ]);
 
   const partitionedPages = useMemo(() => {
