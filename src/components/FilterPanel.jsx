@@ -35,10 +35,14 @@ export default function FilterPanel({
             className={`px-3 py-1 text-xs rounded-full border ${
               activeParentFilter === l ? "ring-2 ring-[#009FB8]" : ""
             }`}
-            style={{
-              background: labelColors[l],
-              color: getContrastYIQ(labelColors[l]),
-            }}
+            style={
+              labelColors[l]
+                ? {
+                    background: labelColors[l],
+                    color: getContrastYIQ(labelColors[l]),
+                  }
+                : {}
+            }
           >
             {l}
           </button>
