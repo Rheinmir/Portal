@@ -156,7 +156,6 @@ export default function App() {
   const [searchPreview, setSearchPreview] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const searchFileInputRef = useRef(null);
-  const searchFormRef = useRef(null);
 
   const [currentPage, setCurrentPage] = useState(0),
     [touchStartX, setTouchStartX] = useState(null),
@@ -598,19 +597,30 @@ export default function App() {
 
   const handleSearchSubmit = async () => {
     if (searchFile) {
-      if (searchFormRef.current && searchFileInputRef.current) {
-        try {
-          // Ensure the file input has the current searchFile
-          // This handles cases where the file was set via Drag & Drop or other means
-          const dt = new DataTransfer();
-          dt.items.add(searchFile);
-          searchFileInputRef.current.files = dt.files;
+      if (searchFile.size > 20 * 1024 * 1024) {
+        alert(t("file_too_large") || "File too large (max 20MB)");
+        return;
+      }
+      try {
+        const formData = new FormData();
+        formData.append("image", searchFile);
 
-          searchFormRef.current.submit();
-        } catch (err) {
-          console.error("Form submission failed:", err);
-          alert(t("error_search") || "Search failed");
+        const res = await fetch("/api/search-image", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!res.ok) throw new Error("Search failed");
+
+        const data = await res.json();
+        if (data.redirectUrl) {
+          window.open(data.redirectUrl, "_blank");
+        } else {
+          throw new Error("No redirect URL returned");
         }
+      } catch (err) {
+        console.error("Search error:", err);
+        alert(t("error_search") || "Search failed");
       }
     } else if (searchTerm.trim()) {
       window.open(
@@ -1308,23 +1318,13 @@ export default function App() {
                   >
                     <Camera size={16} />
                   </button>
-                  <form
-                    ref={searchFormRef}
-                    action="https://lens.google.com/v3/upload"
-                    method="POST"
-                    encType="multipart/form-data"
-                    target="_blank"
+                  <input
+                    type="file"
+                    ref={searchFileInputRef}
                     className="hidden"
-                  >
-                    <input
-                      type="file"
-                      ref={searchFileInputRef}
-                      name="encoded_image"
-                      className="hidden"
-                      accept="image/*"
-                      onChange={handleSearchImageSelect}
-                    />
-                  </form>
+                    accept="image/*"
+                    onChange={handleSearchImageSelect}
+                  />
                 </div>
               </div>
               <React.Suspense
