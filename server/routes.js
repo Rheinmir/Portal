@@ -474,8 +474,8 @@ router.post("/search-image", upload.single("image"), async (req, res) => {
         headers: {
           ...form.getHeaders(),
         },
-        maxRedirects: 5, // Follow redirects to get final search URL
-        validateStatus: (status) => status >= 200 && status < 400, // Accept 3xx as success if we didn't follow
+        maxRedirects: 0, // Do NOT follow redirects. We want the Location header.
+        validateStatus: (status) => status >= 200 && status < 400, // Accept 302/303 as success
       }
     );
 
