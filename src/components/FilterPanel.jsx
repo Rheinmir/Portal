@@ -46,7 +46,7 @@ export default function FilterPanel({
       </div>
       {uniqueChildren.length > 0 && (
         <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-500/20">
-          <span className="text-xs font-bold uppercase opacity-60">Tag:</span>
+          <span className="text-xs font-bold opacity-60">Tag:</span>
           {uniqueChildren.map((l) => (
             <button
               key={l}
