@@ -63,5 +63,7 @@
   "error_deleting": "Delete Error",
   "error_syncing_favorite": "Favorite Sync Error",
   "invalid_credentials": "Invalid credentials",
-  "import_successful": "Import successful!"
+  "import_successful": "Import successful!",
+  "group_by_tag": "Group by Tag",
+  "uncategorized": "Uncategorized"
 }
