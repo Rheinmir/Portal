@@ -1,4 +1,4 @@
-import React from 'react';
+import React from "react";
 
 export default function FilterPanel({
   isOpen,
@@ -10,7 +10,7 @@ export default function FilterPanel({
   uniqueChildren,
   labelColors,
   modalClass,
-  getContrastYIQ
+  getContrastYIQ,
 }) {
   if (!isOpen) return null;
 
@@ -22,7 +22,9 @@ export default function FilterPanel({
         <span className="text-xs font-bold uppercase opacity-60">Nhóm:</span>
         <button
           onClick={() => setActiveParentFilter(null)}
-          className={`px-3 py-1 text-xs rounded-full border ${!activeParentFilter ? 'bg-[#0A1A2F] text-white' : ''}`}
+          className={`px-3 py-1 text-xs rounded-full border ${
+            !activeParentFilter ? "bg-[#0A1A2F] text-white" : ""
+          }`}
         >
           All
         </button>
@@ -30,10 +32,12 @@ export default function FilterPanel({
           <button
             key={l}
             onClick={() => setActiveParentFilter(l)}
-            className={`px-3 py-1 text-xs rounded-full border ${activeParentFilter === l ? 'ring-2 ring-[#009FB8]' : ''}`}
+            className={`px-3 py-1 text-xs rounded-full border ${
+              activeParentFilter === l ? "ring-2 ring-[#009FB8]" : ""
+            }`}
             style={{
               background: labelColors[l],
-              color: getContrastYIQ(labelColors[l])
+              color: getContrastYIQ(labelColors[l]),
             }}
           >
             {l}
@@ -42,20 +46,22 @@ export default function FilterPanel({
       </div>
       {uniqueChildren.length > 0 && (
         <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-500/20">
-          <span className="text-xs font-bold opacity-60">Tag:</span>
+          <span className="text-xs font-bold uppercase opacity-60">Tag:</span>
           {uniqueChildren.map((l) => (
             <button
               key={l}
               onClick={() =>
                 setActiveChildFilter(activeChildFilter === l ? null : l)
               }
-              className={`px-2 py-0.5 text-[10px] rounded-full border ${activeChildFilter === l ? 'bg-[#009FB8] text-white' : ''}`}
+              className={`px-2 py-0.5 text-[10px] rounded-full border ${
+                activeChildFilter === l ? "bg-[#009FB8] text-white" : ""
+              }`}
               style={
                 activeChildFilter === l && labelColors[l]
                   ? {
                       background: labelColors[l],
                       borderColor: labelColors[l],
-                      color: getContrastYIQ(labelColors[l])
+                      color: getContrastYIQ(labelColors[l]),
                     }
                   : {}
               }

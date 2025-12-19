@@ -81,5 +81,15 @@ pipeline {
                 }
             }
         }
+
+        stage('Cleanup') {
+            steps {
+                script {
+                    echo "Cleaning up system..."
+                    // Prune dangling images (images that are no longer tagged or used)
+                    sh "docker image prune -f || true"
+                }
+            }
+        }
     }
 }

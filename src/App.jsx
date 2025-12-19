@@ -70,7 +70,9 @@ const getContrastYIQ = (hex) => {
   const r = parseInt(h.substr(0, 2), 16),
     g = parseInt(h.substr(2, 2), 16),
     b = parseInt(h.substr(4, 2), 16);
-  return (r * 299 + g * 587 + b * 114) / 1000 >= 128 ? "#000" : "#fff";
+  return (r * 299 + g * 587 + b * 114) / 1000 >= 128
+    ? DEFAULT_LIGHT_TEXT
+    : "#fff";
 };
 const normalizeTenant = (t) =>
   (t && typeof t === "string" ? t.trim() : "") || "default";
