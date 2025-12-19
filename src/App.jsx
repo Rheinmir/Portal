@@ -597,30 +597,25 @@ export default function App() {
 
   const handleSearchSubmit = async () => {
     if (searchFile) {
-      if (searchFile.size > 20 * 1024 * 1024) {
-        alert(t("file_too_large") || "File too large (max 20MB)");
-        return;
-      }
       try {
-        const formData = new FormData();
-        formData.append("image", searchFile);
-
-        const res = await fetch("/api/search-image", {
-          method: "POST",
-          body: formData,
-        });
-
-        if (!res.ok) throw new Error("Search failed");
-
-        const data = await res.json();
-        if (data.redirectUrl) {
-          window.open(data.redirectUrl, "_blank");
-        } else {
-          throw new Error("No redirect URL returned");
-        }
+        const type = searchFile.type;
+        const blob = searchFile;
+        // Copy to clipboard
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            [type]: blob,
+          }),
+        ]);
+        alert(
+          t("image_copied_hint") || "Image copied! Press Ctrl+V in the new tab."
+        );
+        // Open Google Lens directly
+        window.open("https://lens.google.com/", "_blank");
       } catch (err) {
-        console.error("Search error:", err);
-        alert(t("error_search") || "Search failed");
+        console.error("Clipboard write failed:", err);
+        // Fallback
+        alert(t("error_copy_image") + ": " + err.message);
+        window.open("https://lens.google.com/", "_blank");
       }
     } else if (searchTerm.trim()) {
       window.open(

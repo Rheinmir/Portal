@@ -2,11 +2,6 @@ import express from "express";
 import crypto from "crypto";
 import sharp from "sharp";
 import { db } from "./database.js";
-import multer from "multer";
-import axios from "axios";
-import FormData from "form-data";
-
-const upload = multer({ storage: multer.memoryStorage() });
 
 const router = express.Router();
 
@@ -443,61 +438,6 @@ router.post("/import", (req, res) => {
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
-  }
-});
-
-// Search Image Proxy
-router.post("/search-image", upload.single("image"), async (req, res) => {
-  try {
-    if (!req.file) return res.status(400).json({ error: "No image provided" });
-
-    const form = new FormData();
-    form.append("encoded_image", req.file.buffer, {
-      filename: req.file.originalname,
-      contentType: req.file.mimetype,
-    });
-
-    // We don't necessarily need to follow redirects automatically,
-    // because we want the first 302/303 location.
-    // However, google lens might return a 200 with content if we follow.
-    // The typical behavior is a 302 Redirect to the results page.
-
-    // axios by default follows redirects (maxRedirects: 5).
-    // But we actually want the FINAL url to give to the user.
-    // So letting axios follow redirects is GOOD, then we just take response.request.res.responseUrl
-    // OR matches the final history.
-
-    const response = await axios.post(
-      "https://lens.google.com/v3/upload",
-      form,
-      {
-        headers: {
-          ...form.getHeaders(),
-        },
-        maxRedirects: 0, // Do NOT follow redirects. We want the Location header.
-        validateStatus: (status) => status >= 200 && status < 400, // Accept 302/303 as success
-      }
-    );
-
-    // If axios followed redirects, the final URL is in response.request.res.responseUrl
-    // If it stopped at 302 (if we set maxRedirects:0), it's in headers.location.
-    // Let's rely on axios getting us to the search page.
-
-    let targetUrl = response.request?.res?.responseUrl;
-
-    // Fallback: check history or location header if maxRedirects was 0
-    if (!targetUrl && response.headers.location) {
-      targetUrl = response.headers.location;
-    }
-
-    if (targetUrl) {
-      res.json({ success: true, redirectUrl: targetUrl });
-    } else {
-      res.status(500).json({ error: "Failed to retrieve search URL" });
-    }
-  } catch (error) {
-    console.error("Proxy Error:", error.message);
-    res.status(500).json({ error: "Failed to search image" });
   }
 });
 
