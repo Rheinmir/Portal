@@ -1310,7 +1310,7 @@ export default function App() {
                   </button>
                   <form
                     ref={searchFormRef}
-                    action="https://www.google.com/searchbyimage/upload"
+                    action="https://lens.google.com/v3/upload"
                     method="POST"
                     encType="multipart/form-data"
                     target="_blank"
