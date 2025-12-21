@@ -1,7 +1,18 @@
 import express from "express";
-import crypto from "crypto";
+import crypto, { randomUUID } from "crypto";
 import sharp from "sharp";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import { db } from "./database.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const TEMP_DIR = path.join(__dirname, "..", "data", "temp");
+
+// Ensure temp directory exists
+if (!fs.existsSync(TEMP_DIR)) {
+  fs.mkdirSync(TEMP_DIR, { recursive: true });
+}
 
 const router = express.Router();
 
@@ -436,6 +447,52 @@ router.post("/import", (req, res) => {
       aff.forEach((t) => cleanupOrphanLabels(t));
     })();
     res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Image Search - Upload temp image for Google Lens search
+router.post("/image-search", (req, res) => {
+  try {
+    const { image } = req.body || {};
+    if (!image || !image.startsWith("data:image")) {
+      return res.status(400).json({ error: "Invalid image data" });
+    }
+
+    // Extract mime type and base64 data
+    const matches = image.match(/^data:image\/(\w+);base64,(.+)$/);
+    if (!matches) {
+      return res.status(400).json({ error: "Invalid image format" });
+    }
+
+    const ext = matches[1] === "jpeg" ? "jpg" : matches[1];
+    const base64Data = matches[2];
+    const filename = `${randomUUID()}.${ext}`;
+    const filepath = path.join(TEMP_DIR, filename);
+
+    // Write file
+    fs.writeFileSync(filepath, Buffer.from(base64Data, "base64"));
+
+    // Schedule deletion after 30 seconds
+    setTimeout(() => {
+      try {
+        if (fs.existsSync(filepath)) {
+          fs.unlinkSync(filepath);
+          console.log(`[Image Search] Cleaned up temp file: ${filename}`);
+        }
+      } catch (e) {
+        console.error(
+          `[Image Search] Failed to delete temp file: ${e.message}`
+        );
+      }
+    }, 30000);
+
+    // Return the public URL path
+    res.json({
+      success: true,
+      url: `/temp/${filename}`,
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

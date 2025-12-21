@@ -575,6 +575,26 @@ export default function App() {
     }
   };
 
+  // Handle paste event for image search
+  const handleSearchPaste = (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (const item of items) {
+      if (item.type.startsWith("image/")) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (file) {
+          setSearchFile(file);
+          const reader = new FileReader();
+          reader.onload = (ev) => setSearchPreview(ev.target.result);
+          reader.readAsDataURL(file);
+        }
+        break;
+      }
+    }
+  };
+
   const handleGlobalDragOver = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -596,26 +616,105 @@ export default function App() {
   };
 
   const handleSearchSubmit = async () => {
-    if (searchFile) {
+    if (searchFile || searchPreview) {
+      // Upload image to server, get public URL, open Google Lens with URL
       try {
-        const type = searchFile.type;
-        const blob = searchFile;
-        // Copy to clipboard
-        await navigator.clipboard.write([
-          new ClipboardItem({
-            [type]: blob,
-          }),
-        ]);
-        alert(
-          t("image_copied_hint") || "Image copied! Press Ctrl+V in the new tab."
+        // Show loading toast
+        const loadingToast = document.createElement("div");
+        loadingToast.textContent = "🔍 " + (t("searching") || "Searching...");
+        loadingToast.style.cssText = `
+          position: fixed;
+          bottom: 80px;
+          left: 50%;
+          transform: translateX(-50%);
+          background: rgba(0,0,0,0.85);
+          color: white;
+          padding: 12px 24px;
+          border-radius: 12px;
+          font-size: 14px;
+          z-index: 9999;
+          box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        `;
+        document.body.appendChild(loadingToast);
+
+        // Upload image to server
+        const response = await fetch("/api/image-search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image: searchPreview }),
+        });
+
+        const data = await response.json();
+
+        if (!data.success || !data.url) {
+          throw new Error(data.error || "Upload failed");
+        }
+
+        // Build full public URL
+        const publicUrl = window.location.origin + data.url;
+
+        // Open Google Lens with the image URL
+        window.open(
+          `https://lens.google.com/uploadbyurl?url=${encodeURIComponent(
+            publicUrl
+          )}`,
+          "_blank"
         );
-        // Open Google Lens directly
-        window.open("https://lens.google.com/", "_blank");
+
+        // Remove loading toast
+        document.body.removeChild(loadingToast);
+
+        // Clear the search image
+        setSearchFile(null);
+        setSearchPreview(null);
+        if (searchFileInputRef.current) searchFileInputRef.current.value = "";
       } catch (err) {
-        console.error("Clipboard write failed:", err);
-        // Fallback
-        alert(t("error_copy_image") + ": " + err.message);
-        window.open("https://lens.google.com/", "_blank");
+        console.error("Image search failed:", err);
+        // Fallback to clipboard approach
+        try {
+          if (searchFile) {
+            await navigator.clipboard.write([
+              new ClipboardItem({
+                [searchFile.type]: searchFile,
+              }),
+            ]);
+          }
+          window.open("https://lens.google.com/", "_blank");
+
+          const hint =
+            t("image_copied_hint") ||
+            "Image copied! Press Ctrl+V → Enter in the new tab.";
+
+          const toast = document.createElement("div");
+          toast.textContent = "📋 " + hint;
+          toast.style.cssText = `
+            position: fixed;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.85);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-size: 14px;
+            z-index: 9999;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+          `;
+          document.body.appendChild(toast);
+          setTimeout(() => {
+            toast.style.opacity = "0";
+            toast.style.transition = "opacity 0.3s";
+            setTimeout(() => document.body.removeChild(toast), 300);
+          }, 4000);
+
+          setSearchFile(null);
+          setSearchPreview(null);
+          if (searchFileInputRef.current) searchFileInputRef.current.value = "";
+        } catch (clipErr) {
+          alert(
+            t("error_copy_image") || "Could not search image. Please try again."
+          );
+        }
       }
     } else if (searchTerm.trim()) {
       window.open(
@@ -1298,6 +1397,7 @@ export default function App() {
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSearchSubmit()}
+                  onPaste={handleSearchPaste}
                 />
 
                 {/* Image Upload Trigger */}
