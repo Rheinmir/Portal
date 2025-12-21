@@ -545,6 +545,32 @@ router.get("/image-search/logs", (req, res) => {
   }
 });
 
-router.get("/health", (req, res) => res.json({ status: "ok" }));
+router.get("/health", (req, res) => {
+  try {
+    // Check database connectivity
+    const dbCheck = db.prepare("SELECT 1 as ok").get();
+
+    // Get system info
+    const memUsage = process.memoryUsage();
+
+    res.json({
+      status: "ok",
+      timestamp: new Date().toISOString(),
+      uptime: Math.floor(process.uptime()),
+      database: dbCheck?.ok === 1 ? "connected" : "error",
+      memory: {
+        heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024) + " MB",
+        heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024) + " MB",
+        rss: Math.round(memUsage.rss / 1024 / 1024) + " MB",
+      },
+    });
+  } catch (e) {
+    res.status(500).json({
+      status: "error",
+      timestamp: new Date().toISOString(),
+      error: e.message,
+    });
+  }
+});
 
 export default router;
