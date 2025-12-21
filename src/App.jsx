@@ -734,7 +734,20 @@ export default function App() {
   const fetchInsights = async () => {
     try {
       const r = await fetch("/api/insights");
-      setInsightsData(await r.json());
+      const insightsResult = await r.json();
+
+      // Also fetch image search logs for admin
+      if (isAdmin) {
+        try {
+          const logsRes = await fetch("/api/image-search/logs");
+          const logsData = await logsRes.json();
+          insightsResult.imageSearchLogs = logsData.logs || [];
+        } catch {
+          insightsResult.imageSearchLogs = [];
+        }
+      }
+
+      setInsightsData(insightsResult);
       setShowInsightsModal(true);
     } catch {
       alert(t("error_insights"));
@@ -1975,6 +1988,7 @@ export default function App() {
             onExportStats={handleExportStats}
             onExportSummary={handleExportSummary}
             modalClass={modalClass}
+            isAdmin={isAdmin}
           />
         </React.Suspense>
 
