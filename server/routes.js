@@ -471,8 +471,36 @@ router.post("/image-search", (req, res) => {
     const filename = `${randomUUID()}.${ext}`;
     const filepath = path.join(TEMP_DIR, filename);
 
+    // Calculate file size
+    const fileBuffer = Buffer.from(base64Data, "base64");
+    const fileSize = fileBuffer.length;
+
+    // Get client info
+    const clientIp =
+      req.headers["x-forwarded-for"] ||
+      req.headers["x-real-ip"] ||
+      req.connection?.remoteAddress ||
+      req.socket?.remoteAddress ||
+      "unknown";
+    const userAgent = req.headers["user-agent"] || "unknown";
+
+    // Log to database
+    try {
+      db.prepare(
+        `
+        INSERT INTO image_search_logs (client_ip, user_agent, file_size, file_type, filename)
+        VALUES (?, ?, ?, ?, ?)
+      `
+      ).run(clientIp, userAgent, fileSize, `image/${matches[1]}`, filename);
+      console.log(
+        `[Image Search] Logged: IP=${clientIp}, Size=${fileSize}, Type=image/${matches[1]}`
+      );
+    } catch (logErr) {
+      console.error("[Image Search] Failed to log:", logErr.message);
+    }
+
     // Write file
-    fs.writeFileSync(filepath, Buffer.from(base64Data, "base64"));
+    fs.writeFileSync(filepath, fileBuffer);
 
     // Schedule deletion after 30 seconds
     setTimeout(() => {
@@ -493,6 +521,25 @@ router.post("/image-search", (req, res) => {
       success: true,
       url: `/temp/${filename}`,
     });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Get image search logs (admin only)
+router.get("/image-search/logs", (req, res) => {
+  try {
+    const logs = db
+      .prepare(
+        `
+      SELECT id, client_ip, user_agent, file_size, file_type, filename, searched_at
+      FROM image_search_logs
+      ORDER BY searched_at DESC
+      LIMIT 100
+    `
+      )
+      .all();
+    res.json({ logs });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
