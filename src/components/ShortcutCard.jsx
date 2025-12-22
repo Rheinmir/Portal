@@ -18,6 +18,7 @@ export default function ShortcutCard({
   draggingId,
   darkMode,
   getContrastYIQ,
+  viewMode,
 }) {
   const [copiedId, setCopiedId] = useState(null);
 
@@ -28,6 +29,15 @@ export default function ShortcutCard({
     setTimeout(() => setCopiedId(null), 1000);
   };
 
+  const isLaunchpad = viewMode === "launchpad";
+  const containerClass = isLaunchpad
+    ? "max-w-[130px]" // Larger container
+    : "max-w-[100px]";
+  const iconSizeClass = isLaunchpad
+    ? "w-24 h-24 rounded-3xl"
+    : "w-16 h-16 rounded-2xl"; // Larger icon
+  const textSizeClass = isLaunchpad ? "text-sm" : "text-xs"; // Slightly larger text
+
   return (
     <div
       key={item.id}
@@ -37,7 +47,7 @@ export default function ShortcutCard({
       onDragOver={handleDragOver}
       onDrop={(e) => handleDrop(e, item.id)}
       onDragEnd={handleDragEnd}
-      className={`group relative flex flex-col items-center w-full max-w-[100px] cursor-pointer active:scale-95 transition-transform ${
+      className={`group relative flex flex-col items-center w-full ${containerClass} cursor-pointer active:scale-95 transition-transform ${
         draggingId === item.id ? "opacity-50 scale-90" : ""
       }`}
       onClick={() => handleLinkClick(item.id, item.url)}
@@ -53,21 +63,25 @@ export default function ShortcutCard({
             <Copy size={12} />
           )}
         </button>
-        <button
-          onClick={(e) => handleEdit(item, e)}
-          className={`p-1.5 rounded-full shadow-sm border ml-1 ${cardClass}`}
-        >
-          <Pencil size={12} />
-        </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            handleDelete(item.id);
-          }}
-          className={`p-1.5 rounded-full shadow-sm border ml-1 ${cardClass}`}
-        >
-          <Trash2 size={12} />
-        </button>
+        {(isAdmin || item.isLocal) && (
+          <>
+            <button
+              onClick={(e) => handleEdit(item, e)}
+              className={`p-1.5 rounded-full shadow-sm border ml-1 ${cardClass}`}
+            >
+              <Pencil size={12} />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDelete(item.id);
+              }}
+              className={`p-1.5 rounded-full shadow-sm border ml-1 ${cardClass}`}
+            >
+              <Trash2 size={12} />
+            </button>
+          </>
+        )}
       </div>
       <button
         onClick={(e) => handleToggleFavorite(item.id, e)}
@@ -82,7 +96,7 @@ export default function ShortcutCard({
       {/* ICON */}
       <div
         data-icon
-        className="w-16 h-16 mb-2 rounded-2xl overflow-hidden flex items-center justify-center"
+        className={`${iconSizeClass} mb-2 overflow-hidden flex items-center justify-center transition-all`}
         style={{ background: "transparent", boxShadow: "none" }}
       >
         {item.icon_url ? (
@@ -98,7 +112,9 @@ export default function ShortcutCard({
           />
         ) : (
           <div
-            className="w-16 h-16 rounded-2xl flex items-center justify-center mb-2 text-white text-xl font-semibold"
+            className={`w-full h-full flex items-center justify-center text-white ${
+              isLaunchpad ? "text-3xl rounded-3xl" : "text-xl rounded-2xl"
+            } font-semibold`}
             style={{
               background: labelColors[item.parent_label] || "#4A5568",
               boxShadow: "none",
@@ -109,7 +125,7 @@ export default function ShortcutCard({
         )}
       </div>
       <span
-        className="text-xs text-center truncate w-full px-1 leading-tight font-light"
+        className={`${textSizeClass} text-center truncate w-full px-1 leading-tight font-light`}
         style={{ textShadow: bgOverlay ? "0 1px 2px rgba(0,0,0,0.5)" : "none" }}
       >
         {item.name}

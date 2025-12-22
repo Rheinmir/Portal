@@ -145,6 +145,9 @@ export default function App() {
     [bgUrlInput, setBgUrlInput] = useState(""),
     [isEditingPage, setIsEditingPage] = useState(false),
     [pageInput, setPageInput] = useState("");
+  const [viewMode, setViewMode] = useState(
+    () => localStorage.getItem("viewMode") || "default"
+  );
   const [utcOffset, setUtcOffset] = useState(7);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [confirmState, setConfirmState] = useState({
@@ -167,6 +170,8 @@ export default function App() {
     }),
     [draggingId, setDraggingId] = useState(null);
   const [isGrouped, setIsGrouped] = useState(false);
+
+
   const fileInputRef = useRef(null),
     bgInputRef = useRef(null),
     importInputRef = useRef(null),
@@ -1157,6 +1162,7 @@ export default function App() {
     bgEmbed,
     isGrouped,
     showFilterPanel,
+    viewMode,
   ]);
 
   const partitionedPages = useMemo(() => {
@@ -1388,7 +1394,11 @@ export default function App() {
 
             <div className="flex-1 flex items-center justify-center gap-2 max-w-2xl">
               <div
-                className="relative group/search w-full transition-all flex items-center bg-white dark:bg-gray-800 rounded-full border shadow-sm focus-within:ring-2 focus-within:ring-[#009FB8] overflow-hidden"
+                className={`relative group/search transition-all flex items-center bg-white dark:bg-gray-800 rounded-full border shadow-sm focus-within:ring-2 focus-within:ring-[#009FB8] overflow-hidden ${
+                  viewMode === "launchpad"
+                    ? "w-2/3 max-w-lg mx-auto h-10 shadow-md"
+                    : "w-full"
+                }`}
                 style={{ borderColor: darkMode ? "#374151" : "#D8D8D8" }}
               >
                 <button
@@ -1456,6 +1466,30 @@ export default function App() {
                   />
                 </div>
               </div>
+              
+              {/* Mode Toggle Button */}
+              <button
+                onClick={() =>
+                  setViewMode(viewMode === "default" ? "launchpad" : "default")
+                }
+                className={`p-2 rounded-full shadow-sm border transition-colors ${
+                  viewMode === "launchpad"
+                    ? "bg-blue-500 text-white border-blue-600"
+                    : inputClass
+                } ${bgImage || bgVideo || bgEmbed ? "bg-opacity-80" : ""}`}
+                title={
+                  viewMode === "default"
+                    ? "Switch to Launchpad Mode"
+                    : "Switch to Default Mode"
+                }
+              >
+                {viewMode === "default" ? (
+                  <Grip size={18} />
+                ) : (
+                  <LayoutGrid size={18} />
+                )}
+              </button>
+
               <React.Suspense
                 fallback={
                   <div className="w-9 h-9 bg-gray-200/50 rounded-full" />
@@ -1471,6 +1505,27 @@ export default function App() {
                 </button>
               </React.Suspense>
               <div className="flex items-center gap-1 bg-gray-200/50 dark:bg-gray-800/50 rounded-full p-1 backdrop-blur-sm">
+                <button
+                  onClick={() => {
+                    const newMode =
+                      viewMode === "default" ? "launchpad" : "default";
+                    setViewMode(newMode);
+                    localStorage.setItem("viewMode", newMode);
+                  }}
+                  className={`p-1.5 rounded-full text-xs transition-all ${
+                    viewMode === "launchpad"
+                      ? "bg-white dark:bg-gray-700 shadow text-[#009FB8]"
+                      : "opacity-50"
+                  }`}
+                  title={
+                    viewMode === "default"
+                      ? "Switch to Launchpad Mode"
+                      : "Switch to Default Mode"
+                  }
+                >
+                  <LayoutGrid size={14} />
+                </button>
+                <div className="w-px h-3 bg-gray-400/50 mx-0.5" />
                 <button
                   onClick={() => setIsGrouped(!isGrouped)}
                   className={`p-1.5 rounded-full text-xs transition-all ${
@@ -1512,15 +1567,32 @@ export default function App() {
 
           {/* PAGINATION & CLOCK MOBILE */}
           {totalPages > 1 && (
-            <div className="pointer-events-auto w-full max-w-2xl mx-auto flex justify-center mb-1 relative">
-              {/* CLOCK MOBILE: Left of Pagination */}
-              <div className="sm:hidden absolute left-6 top-1/2 -translate-y-1/2">
-                <React.Suspense fallback={null}>
-                  <Clock utcOffset={utcOffset} className="text-sm" />
-                </React.Suspense>
-              </div>
+            <div
+              className={`pointer-events-auto w-full max-w-2xl mx-auto flex justify-center mb-1 relative ${
+                viewMode === "launchpad"
+                  ? "fixed bottom-8 left-0 right-0 z-50 pointer-events-none"
+                  : ""
+              }`}
+            >
+              <div
+                className={`${
+                  viewMode === "launchpad" ? "pointer-events-auto" : ""
+                }`}
+              >
+                {/* CLOCK MOBILE: Left of Pagination */}
+                <div className="sm:hidden absolute left-6 top-1/2 -translate-y-1/2">
+                  <React.Suspense fallback={null}>
+                    <Clock utcOffset={utcOffset} className="text-sm" />
+                  </React.Suspense>
+                </div>
 
-              <div className="flex items-center gap-3 px-3 py-1.5 rounded-full bg-gray-100/80 dark:bg-gray-800/80 border border-gray-300/60 dark:border-gray-700/60 backdrop-blur-sm shadow-sm">
+              <div
+                className={`flex items-center gap-3 px-3 py-1.5 rounded-full bg-gray-100/80 dark:bg-gray-800/80 border border-gray-300/60 dark:border-gray-700/60 backdrop-blur-sm shadow-sm ${
+                  viewMode === "launchpad"
+                    ? "fixed bottom-8 left-1/2 -translate-x-1/2 z-40 transform scale-110"
+                    : ""
+                }`}
+              >
                 {totalPages > 6 &&
                   (isEditingPage ? (
                     <input
@@ -1615,7 +1687,11 @@ export default function App() {
           {!isGrouped ? (
             <div
               ref={gridRef}
-              className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-4 justify-items-center"
+              className={`grid gap-4 justify-items-center ${
+                viewMode === "launchpad"
+                  ? "grid-cols-4 md:grid-cols-5 lg:grid-cols-7"
+                  : "grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8"
+              }`}
             >
               {pagedShortcuts.map((i) => (
                 <React.Suspense
@@ -1641,6 +1717,7 @@ export default function App() {
                     draggingId={draggingId}
                     darkMode={darkMode}
                     getContrastYIQ={getContrastYIQ}
+                    viewMode={viewMode}
                   />
                 </React.Suspense>
               ))}
