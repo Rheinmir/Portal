@@ -279,7 +279,14 @@ export default function App() {
           ? s.child_label + ", Personal"
           : "Personal",
       }));
-      setShortcuts([...ss, ...ls]);
+      const deletedIds = JSON.parse(
+        localStorage.getItem("deleted_shortcuts") || "[]"
+      );
+      const lsIds = new Set(ls.map((s) => s.id));
+      const filteredServer = ss.filter(
+        (s) => !deletedIds.includes(s.id) && !lsIds.has(s.id)
+      );
+      setShortcuts([...filteredServer, ...ls]);
       setLabelColors(d.labelColors || {});
       const c = d.appConfig || {};
       const serverVer = Number(c.config_version || 0);
@@ -789,12 +796,16 @@ export default function App() {
     const payload = { ...formData, icon_url: iconToSave };
     const isEdit = !!formData.id;
 
+    // 3. Determine Local Status First
+    const isTargetLocal = !isAdmin || formData.isLocal;
+
     // 2. Optimistic Update
     const previousShortcuts = [...shortcuts];
     const tempId = isEdit ? formData.id : Date.now(); // Temp ID for new item
     const optimisticItem = {
       ...payload,
       id: tempId,
+      isLocal: isTargetLocal,
       clicks: isEdit
         ? shortcuts.find((s) => s.id === formData.id)?.clicks || 0
         : 0,
@@ -817,10 +828,8 @@ export default function App() {
     resetForm();
 
     // 3. Background Sync
-    const isLocal = !isAdmin || formData.isLocal;
-
     try {
-      if (isLocal) {
+      if (isTargetLocal) {
         // Local Storage Sync
         const l = JSON.parse(localStorage.getItem("local_shortcuts") || "[]");
         let nl;
@@ -877,13 +886,25 @@ export default function App() {
               "local_shortcuts",
               JSON.stringify(l.filter((s) => s.id !== id))
             );
-            // done
-          } else if (isAdmin) {
-            // Server Sync
-            const res = await fetch(`/api/shortcuts/${id}`, {
-              method: "DELETE",
-            });
-            if (!res.ok) throw new Error("Delete failed");
+          }
+
+          if (isAdmin) {
+            if (!t || !t.isLocal) {
+              // Server Sync
+              const res = await fetch(`/api/shortcuts/${id}`, {
+                method: "DELETE",
+              });
+              if (!res.ok) throw new Error("Delete failed");
+            }
+          } else {
+            // Non-admin: mark as deleted locally
+            const del = JSON.parse(
+              localStorage.getItem("deleted_shortcuts") || "[]"
+            );
+            if (!del.includes(id)) {
+              del.push(id);
+              localStorage.setItem("deleted_shortcuts", JSON.stringify(del));
+            }
           }
         } catch (err) {
           // Rollback
