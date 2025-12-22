@@ -171,7 +171,6 @@ export default function App() {
     [draggingId, setDraggingId] = useState(null);
   const [isGrouped, setIsGrouped] = useState(false);
 
-
   const fileInputRef = useRef(null),
     bgInputRef = useRef(null),
     importInputRef = useRef(null),
@@ -1466,7 +1465,7 @@ export default function App() {
                   />
                 </div>
               </div>
-              
+
               {/* Mode Toggle Button */}
               <button
                 onClick={() =>
@@ -1586,61 +1585,62 @@ export default function App() {
                   </React.Suspense>
                 </div>
 
-              <div
-                className={`flex items-center gap-3 px-3 py-1.5 rounded-full bg-gray-100/80 dark:bg-gray-800/80 border border-gray-300/60 dark:border-gray-700/60 backdrop-blur-sm shadow-sm ${
-                  viewMode === "launchpad"
-                    ? "fixed bottom-8 left-1/2 -translate-x-1/2 z-40 transform scale-110"
-                    : ""
-                }`}
-              >
-                {totalPages > 6 &&
-                  (isEditingPage ? (
-                    <input
-                      autoFocus
-                      className="w-12 bg-transparent border-b border-blue-500 text-center text-[11px] outline-none"
-                      value={pageInput}
-                      onChange={(e) => setPageInput(e.target.value)}
-                      onBlur={() => {
-                        setIsEditingPage(false);
-                        setPageInput("");
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          const p = parseInt(pageInput) - 1;
-                          if (!isNaN(p) && p >= 0 && p < totalPages)
-                            setCurrentPage(p);
+                <div
+                  className={`flex items-center gap-3 px-3 py-1.5 rounded-full bg-gray-100/80 dark:bg-gray-800/80 border border-gray-300/60 dark:border-gray-700/60 backdrop-blur-sm shadow-sm ${
+                    viewMode === "launchpad"
+                      ? "fixed bottom-8 left-1/2 -translate-x-1/2 z-40 transform scale-110"
+                      : ""
+                  }`}
+                >
+                  {totalPages > 6 &&
+                    (isEditingPage ? (
+                      <input
+                        autoFocus
+                        className="w-12 bg-transparent border-b border-blue-500 text-center text-[11px] outline-none"
+                        value={pageInput}
+                        onChange={(e) => setPageInput(e.target.value)}
+                        onBlur={() => {
                           setIsEditingPage(false);
-                        }
-                      }}
-                    />
-                  ) : (
-                    <span
-                      className="text-[11px] opacity-70 hover:opacity-100 cursor-pointer font-medium min-w-[60px] text-center"
-                      onClick={() => {
-                        setIsEditingPage(true);
-                        setPageInput(String(currentPage + 1));
-                      }}
-                      title={t("enter_page_number")}
-                    >
-                      {t("page")} {currentPage + 1}/{totalPages}
-                    </span>
-                  ))}
-                <div className="flex items-center gap-1.5">
-                  {visibleDots.map((i) => (
-                    <button
-                      key={i}
-                      onClick={() => setCurrentPage(i)}
-                      className={`w-2 h-2 rounded-full transition-all duration-300 border ${
-                        i === currentPage
-                          ? darkMode
-                            ? "bg-white border-white scale-125"
-                            : "bg-gray-800 border-gray-800 scale-125"
-                          : darkMode
-                          ? "bg-white/20 border-white/20 hover:bg-white/40"
-                          : "bg-gray-400/40 border-gray-400/40 hover:bg-gray-400/60"
-                      }`}
-                    />
-                  ))}
+                          setPageInput("");
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            const p = parseInt(pageInput) - 1;
+                            if (!isNaN(p) && p >= 0 && p < totalPages)
+                              setCurrentPage(p);
+                            setIsEditingPage(false);
+                          }
+                        }}
+                      />
+                    ) : (
+                      <span
+                        className="text-[11px] opacity-70 hover:opacity-100 cursor-pointer font-medium min-w-[60px] text-center"
+                        onClick={() => {
+                          setIsEditingPage(true);
+                          setPageInput(String(currentPage + 1));
+                        }}
+                        title={t("enter_page_number")}
+                      >
+                        {t("page")} {currentPage + 1}/{totalPages}
+                      </span>
+                    ))}
+                  <div className="flex items-center gap-1.5">
+                    {visibleDots.map((i) => (
+                      <button
+                        key={i}
+                        onClick={() => setCurrentPage(i)}
+                        className={`w-2 h-2 rounded-full transition-all duration-300 border ${
+                          i === currentPage
+                            ? darkMode
+                              ? "bg-white border-white scale-125"
+                              : "bg-gray-800 border-gray-800 scale-125"
+                            : darkMode
+                            ? "bg-white/20 border-white/20 hover:bg-white/40"
+                            : "bg-gray-400/40 border-gray-400/40 hover:bg-gray-400/60"
+                        }`}
+                      />
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
