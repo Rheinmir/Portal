@@ -1171,7 +1171,8 @@ export default function App() {
       const cardEl = gridRef.current.querySelector("[data-card]");
       const cardHeight = cardEl ? cardEl.getBoundingClientRect().height : 140;
       const wrapperRect = gridWrapperRef.current.getBoundingClientRect();
-      const bottomBuffer = viewMode === "launchpad" ? 140 : 80;
+      // Reduced buffer for launchpad to fill gap (pagination is compact at bottom)
+      const bottomBuffer = viewMode === "launchpad" ? 60 : 80;
       const availableHeight =
         window.innerHeight - wrapperRect.top - bottomBuffer;
       const gap = 16; // gap-4 is 1rem = 16px
@@ -1645,67 +1646,6 @@ export default function App() {
           )}
 
           {/* PAGINATION & CLOCK MOBILE */}
-          {totalPages > 1 && (
-            <div className="pointer-events-auto w-full max-w-2xl mx-auto flex justify-center mb-1 relative fixed bottom-2 left-0 right-0 z-50 pointer-events-none">
-              <div className="pointer-events-auto">
-                <div
-                  className={`flex items-center gap-3 px-3 py-1.5 rounded-full transition-all ${
-                    viewMode === "launchpad" ? "transform scale-110" : ""
-                  }`}
-                >
-                  {totalPages > 6 &&
-                    (isEditingPage ? (
-                      <input
-                        autoFocus
-                        className="w-12 bg-transparent border-b border-blue-500 text-center text-[11px] outline-none"
-                        value={pageInput}
-                        onChange={(e) => setPageInput(e.target.value)}
-                        onBlur={() => {
-                          setIsEditingPage(false);
-                          setPageInput("");
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            const p = parseInt(pageInput) - 1;
-                            if (!isNaN(p) && p >= 0 && p < totalPages)
-                              setCurrentPage(p);
-                            setIsEditingPage(false);
-                          }
-                        }}
-                      />
-                    ) : (
-                      <span
-                        className="text-[11px] opacity-70 hover:opacity-100 cursor-pointer font-medium min-w-[60px] text-center"
-                        onClick={() => {
-                          setIsEditingPage(true);
-                          setPageInput(String(currentPage + 1));
-                        }}
-                        title={t("enter_page_number")}
-                      >
-                        {t("page")} {currentPage + 1}/{totalPages}
-                      </span>
-                    ))}
-                  <div className="flex items-center gap-1.5">
-                    {visibleDots.map((i) => (
-                      <button
-                        key={i}
-                        onClick={() => setCurrentPage(i)}
-                        className={`w-2 h-2 rounded-full transition-all duration-300 border ${
-                          i === currentPage
-                            ? darkMode
-                              ? "bg-white border-white scale-125"
-                              : "bg-gray-800 border-gray-800 scale-125"
-                            : darkMode
-                            ? "bg-white/20 border-white/20 hover:bg-white/40"
-                            : "bg-gray-400/40 border-gray-400/40 hover:bg-gray-400/60"
-                        }`}
-                      />
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
 
           <React.Suspense fallback={null}>
             <FilterPanel
@@ -1911,9 +1851,74 @@ export default function App() {
           )}
         </div>
 
+        {/* PAGINATION - Global Fixed Position */}
+        {totalPages > 1 && (
+          <div className="pointer-events-none fixed bottom-0 left-0 right-0 z-40 flex justify-center pb-4 pt-10 bg-gradient-to-t from-transparent to-transparent">
+            <div className="pointer-events-auto">
+              <div
+                className={`flex items-center gap-3 px-3 py-1.5 rounded-full transition-all ${
+                  viewMode === "launchpad" ? "transform scale-110" : ""
+                }`}
+              >
+                {totalPages > 6 &&
+                  (isEditingPage ? (
+                    <input
+                      autoFocus
+                      className="w-12 bg-transparent border-b border-blue-500 text-center text-[11px] outline-none"
+                      value={pageInput}
+                      onChange={(e) => setPageInput(e.target.value)}
+                      onBlur={() => {
+                        setIsEditingPage(false);
+                        setPageInput("");
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          const p = parseInt(pageInput) - 1;
+                          if (!isNaN(p) && p >= 0 && p < totalPages)
+                            setCurrentPage(p);
+                          setIsEditingPage(false);
+                        }
+                      }}
+                    />
+                  ) : (
+                    <span
+                      className="text-[11px] opacity-70 hover:opacity-100 cursor-pointer font-medium min-w-[60px] text-center"
+                      onClick={() => {
+                        setIsEditingPage(true);
+                        setPageInput(String(currentPage + 1));
+                      }}
+                      title={t("enter_page_number")}
+                    >
+                      {t("page")} {currentPage + 1}/{totalPages}
+                    </span>
+                  ))}
+                <div className="flex items-center gap-1.5">
+                  {visibleDots.map((i) => (
+                    <button
+                      key={i}
+                      onClick={() => setCurrentPage(i)}
+                      className={`w-2 h-2 rounded-full transition-all duration-300 border ${
+                        i === currentPage
+                          ? darkMode
+                            ? "bg-white border-white scale-125"
+                            : "bg-gray-800 border-gray-800 scale-125"
+                          : darkMode
+                          ? "bg-white/20 border-white/20 hover:bg-white/40"
+                          : "bg-gray-400/40 border-gray-400/40 hover:bg-gray-400/60"
+                      }`}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="fixed right-0 top-1/2 -translate-y-1/2 z-50 flex items-center group/panel pointer-events-none">
-          {/* Trigger Handle - Visible but subtle */}
-          <div className="pointer-events-auto w-1.5 h-16 bg-gray-400/5 hover:bg-gray-400/40 backdrop-blur-[1px] hover:backdrop-blur-sm rounded-l-full cursor-pointer transition-all duration-300 peer" />
+          {/* Trigger Handle - Visible but subtle, with larger hit area */}
+          <div className="pointer-events-auto w-6 h-24 flex items-center justify-end pr-0 cursor-pointer peer transition-all duration-300">
+            <div className="w-1.5 h-16 bg-gray-400/20 group-hover/panel:bg-gray-400/40 hover:!bg-gray-400/60 backdrop-blur-[1px] rounded-l-full transition-all duration-300" />
+          </div>
 
           {/* Config Menu - Reveals on hover of trigger or menu itself */}
           <div
