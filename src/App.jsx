@@ -1501,6 +1501,13 @@ export default function App() {
               </div>
 
               <div className="flex items-center">
+                {/* Mobile Config Toggle (Portrait only) */}
+                <button
+                  onClick={() => setShowConfig(!showConfig)}
+                  className="hidden portrait:flex p-2 rounded-full shadow-sm border bg-white/50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 hover:bg-white/80 dark:hover:bg-gray-800/80 backdrop-blur-sm mr-2"
+                >
+                  <Settings size={18} />
+                </button>
                 <div
                   className={`flex items-center gap-2 overflow-hidden transition-all duration-300 ease-in-out ${
                     showMenu
@@ -1911,7 +1918,7 @@ export default function App() {
           </div>
         )}
 
-        <div className="fixed right-0 top-1/2 -translate-y-1/2 z-50 flex items-center group/panel pointer-events-none">
+        <div className="fixed right-0 top-1/2 -translate-y-1/2 z-50 flex items-center group/panel pointer-events-none portrait:hidden">
           {/* Trigger Handle - Invisible by default, reveals on hover */}
           <div
             className="pointer-events-auto w-14 h-48 flex items-center justify-end pr-0 cursor-pointer peer transition-all duration-300"
