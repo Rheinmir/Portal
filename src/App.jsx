@@ -1911,9 +1911,9 @@ export default function App() {
         )}
 
         <div className="fixed right-0 top-1/2 -translate-y-1/2 z-50 flex items-center group/panel pointer-events-none">
-          {/* Trigger Handle - Visible but subtle, with larger hit area */}
+          {/* Trigger Handle - Invisible by default, reveals on hover */}
           <div className="pointer-events-auto w-6 h-24 flex items-center justify-end pr-0 cursor-pointer peer transition-all duration-300">
-            <div className="w-1.5 h-16 bg-gray-400/20 group-hover/panel:bg-gray-400/40 hover:!bg-gray-400/60 backdrop-blur-[1px] rounded-l-full transition-all duration-300" />
+            <div className="w-1.5 h-16 bg-gray-400/40 opacity-0 group-hover/panel:opacity-100 hover:!bg-gray-400/60 backdrop-blur-[1px] rounded-l-full transition-all duration-300" />
           </div>
 
           {/* Config Menu - Reveals on hover of trigger or menu itself */}
