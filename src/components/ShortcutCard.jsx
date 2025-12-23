@@ -21,6 +21,7 @@ export default function ShortcutCard({
   viewMode,
 }) {
   const [copiedId, setCopiedId] = useState(null);
+  const [showAllTags, setShowAllTags] = useState(false);
 
   const handleCopy = (e) => {
     e.stopPropagation();
@@ -144,23 +145,56 @@ export default function ShortcutCard({
             {item.parent_label}
           </span>
         )}
-        {(item.child_label || "")
-          .split(",")
-          .filter(Boolean)
-          .map((t) => (
+        {(() => {
+          const tags = (item.child_label || "")
+            .split(",")
+            .filter((t) => t.trim());
+          if (tags.length === 0) return null;
+
+          // If showing all or only 1 tag, simple map
+          if (showAllTags || tags.length === 1) {
+            return tags.map((t) => (
+              <span
+                key={t}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (tags.length > 1) setShowAllTags(!showAllTags);
+                }}
+                className={`text-[8px] px-1 py-0.5 rounded-full border truncate max-w-[60px] bg-white/50 backdrop-blur-sm cursor-pointer hover:bg-white/80 ${
+                  darkMode ? "border-gray-600" : "border-gray-300"
+                }`}
+                style={{
+                  borderColor: labelColors[t?.trim()],
+                  color: labelColors[t?.trim()] || (darkMode ? "#ddd" : "#333"),
+                }}
+                title={tags.length > 1 ? "Click to collapse" : ""}
+              >
+                {t.trim()}
+              </span>
+            ));
+          }
+
+          // Compact view: Show first tag + " +"
+          const firstTag = tags[0].trim();
+          return (
             <span
-              key={t}
-              className={`text-[8px] px-1 py-0.5 rounded-full border truncate max-w-[60px] bg-white/50 backdrop-blur-sm ${
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowAllTags(true);
+              }}
+              className={`text-[8px] px-1 py-0.5 rounded-full border truncate max-w-[60px] bg-white/50 backdrop-blur-sm cursor-pointer hover:bg-white/80 flex items-center gap-0.5 ${
                 darkMode ? "border-gray-600" : "border-gray-300"
               }`}
               style={{
-                borderColor: labelColors[t?.trim()],
-                color: labelColors[t?.trim()] || (darkMode ? "#ddd" : "#333"),
+                borderColor: labelColors[firstTag],
+                color: labelColors[firstTag] || (darkMode ? "#ddd" : "#333"),
               }}
+              title="Click to show all tags"
             >
-              {t.trim()}
+              {firstTag} <span className="font-bold opacity-70 ml-0.5">+</span>
             </span>
-          ))}
+          );
+        })()}
       </div>
     </div>
   );
