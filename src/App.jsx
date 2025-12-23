@@ -1458,6 +1458,8 @@ export default function App() {
                   </div>
                 )}
 
+              </div>
+
                 <input
                   type="text"
                   className={`block w-full px-2 py-2 text-sm focus:outline-none bg-transparent ${
@@ -1501,13 +1503,6 @@ export default function App() {
               </div>
 
               <div className="flex items-center">
-                {/* Mobile Config Toggle (Portrait only) */}
-                <button
-                  onClick={() => setShowConfig(!showConfig)}
-                  className="hidden portrait:flex p-2 rounded-full shadow-sm border bg-white/50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 hover:bg-white/80 dark:hover:bg-gray-800/80 backdrop-blur-sm mr-2"
-                >
-                  <Settings size={18} />
-                </button>
                 <div
                   className={`flex items-center gap-2 overflow-hidden transition-all duration-300 ease-in-out ${
                     showMenu
@@ -1632,6 +1627,14 @@ export default function App() {
                       showMenu ? "rotate-180" : ""
                     }`}
                   />
+                </button>
+
+                {/* Mobile Config Toggle (Portrait only) - Far Right & Auto-Hide */}
+                <button
+                  onClick={() => setShowConfig(!showConfig)}
+                  className="hidden portrait:flex ml-2 p-2 rounded-full shadow-sm border bg-white/50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 hover:bg-white/80 dark:hover:bg-gray-800/80 backdrop-blur-sm opacity-0 hover:opacity-100 transition-opacity duration-300"
+                >
+                  <Settings size={18} />
                 </button>
               </div>
             </div>
@@ -1918,10 +1921,10 @@ export default function App() {
           </div>
         )}
 
-        <div className="fixed right-0 top-1/2 -translate-y-1/2 z-50 flex items-center group/panel pointer-events-none portrait:hidden">
+        <div className="fixed right-0 top-1/2 -translate-y-1/2 z-50 flex items-center group/panel pointer-events-none">
           {/* Trigger Handle - Invisible by default, reveals on hover */}
           <div
-            className="pointer-events-auto w-14 h-48 flex items-center justify-end pr-0 cursor-pointer peer transition-all duration-300"
+            className="pointer-events-auto w-14 h-48 flex items-center justify-end pr-0 cursor-pointer peer transition-all duration-300 portrait:hidden"
             onClick={() => setShowConfig(!showConfig)}
           >
             <div
