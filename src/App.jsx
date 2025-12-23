@@ -648,11 +648,37 @@ export default function App() {
         `;
         document.body.appendChild(loadingToast);
 
+        // Compression Helper
+        const compressImage = (dataUrl, maxWidth = 800, quality = 0.7) => {
+          return new Promise((resolve) => {
+            const img = new Image();
+            img.src = dataUrl;
+            img.onload = () => {
+              const canvas = document.createElement("canvas");
+              let width = img.width;
+              let height = img.height;
+
+              if (width > maxWidth) {
+                height = Math.round((height * maxWidth) / width);
+                width = maxWidth;
+              }
+
+              canvas.width = width;
+              canvas.height = height;
+              const ctx = canvas.getContext("2d");
+              ctx.drawImage(img, 0, 0, width, height);
+              resolve(canvas.toDataURL("image/jpeg", quality));
+            };
+          });
+        };
+
+        const compressedImage = await compressImage(searchPreview);
+
         // Upload image to server
         const response = await fetch("/api/image-search", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ image: searchPreview }),
+          body: JSON.stringify({ image: compressedImage }),
         });
 
         const data = await response.json();
@@ -1387,8 +1413,8 @@ export default function App() {
         <div className="sticky top-0 z-30 w-full flex flex-col pt-4 px-4 gap-2 pointer-events-none">
           <div className="pointer-events-auto w-full max-w-7xl mx-auto flex items-center justify-between gap-3 relative">
             {/* CLOCK DESKTOP: Now responsive, on the left */}
-            {viewMode !== "launchpad" && (
-              <div className="hidden sm:block min-w-[120px]">
+            <div className="hidden sm:block min-w-[120px]">
+              {viewMode !== "launchpad" && (
                 <React.Suspense
                   fallback={
                     <div className="h-8 w-24 bg-gray-200/20 rounded animate-pulse" />
@@ -1396,8 +1422,8 @@ export default function App() {
                 >
                   <Clock utcOffset={utcOffset} />
                 </React.Suspense>
-              </div>
-            )}
+              )}
+            </div>
 
             <div className="flex-1 flex items-center justify-center gap-2 max-w-2xl">
               <div
