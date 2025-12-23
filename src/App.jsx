@@ -1789,7 +1789,7 @@ export default function App() {
 
                       <div
                         ref={gIdx === 0 ? gridRef : null}
-                        className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-9 gap-4 justify-items-center mt-2"
+                        className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 gap-2 sm:gap-4 justify-items-center mt-2"
                       >
                         {items.map((i) => (
                           <React.Suspense
@@ -1914,7 +1914,7 @@ export default function App() {
         <div className="fixed right-0 top-1/2 -translate-y-1/2 z-50 flex items-center group/panel pointer-events-none">
           {/* Trigger Handle - Invisible by default, reveals on hover */}
           <div
-            className="pointer-events-auto w-6 h-24 flex items-center justify-end pr-0 cursor-pointer peer transition-all duration-300"
+            className="pointer-events-auto w-14 h-48 flex items-center justify-end pr-0 cursor-pointer peer transition-all duration-300"
             onClick={() => setShowConfig(!showConfig)}
           >
             <div
