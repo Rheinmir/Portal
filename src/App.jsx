@@ -1637,18 +1637,8 @@ export default function App() {
 
           {/* PAGINATION & CLOCK MOBILE */}
           {totalPages > 1 && (
-            <div
-              className={`pointer-events-auto w-full max-w-2xl mx-auto flex justify-center mb-1 relative ${
-                viewMode === "launchpad"
-                  ? "fixed bottom-8 left-0 right-0 z-50 pointer-events-none"
-                  : ""
-              }`}
-            >
-              <div
-                className={`${
-                  viewMode === "launchpad" ? "pointer-events-auto" : ""
-                }`}
-              >
+            <div className="pointer-events-auto w-full max-w-2xl mx-auto flex justify-center mb-1 relative fixed bottom-8 left-0 right-0 z-50 pointer-events-none">
+              <div className="pointer-events-auto">
                 {/* CLOCK MOBILE: Left of Pagination */}
                 {viewMode !== "launchpad" && (
                   <div className="sm:hidden absolute left-6 top-1/2 -translate-y-1/2">
@@ -1659,10 +1649,8 @@ export default function App() {
                 )}
 
                 <div
-                  className={`flex items-center gap-3 px-3 py-1.5 rounded-full bg-gray-100/80 dark:bg-gray-800/80 border border-gray-300/60 dark:border-gray-700/60 backdrop-blur-sm shadow-sm ${
-                    viewMode === "launchpad"
-                      ? "fixed bottom-8 left-1/2 -translate-x-1/2 z-40 transform scale-110"
-                      : ""
+                  className={`flex items-center gap-3 px-3 py-1.5 rounded-full transition-all ${
+                    viewMode === "launchpad" ? "transform scale-110" : ""
                   }`}
                 >
                   {totalPages > 6 &&
@@ -1923,9 +1911,13 @@ export default function App() {
           )}
         </div>
 
-        <div className="fixed right-6 top-1/2 -translate-y-1/2 z-50 pointer-events-auto opacity-0 hover:opacity-100 transition-opacity duration-300">
+        <div className="fixed right-0 top-1/2 -translate-y-1/2 z-50 flex items-center group/panel">
+          {/* Trigger Handle - Visible when menu is hidden */}
+          <div className="w-1.5 h-16 bg-gray-400/30 hover:bg-gray-400/60 backdrop-blur-sm rounded-l-full cursor-pointer transition-all duration-300 group-hover/panel:opacity-0 group-hover/panel:translate-x-full" />
+
+          {/* Config Menu - Reveals on hover */}
           <div
-            className={`group/menu flex flex-col items-center gap-2 p-2 rounded-3xl border shadow-lg ${inputClass} bg-opacity-90 backdrop-blur-md transition-all`}
+            className={`flex flex-col items-center gap-2 p-2 rounded-l-3xl border shadow-lg ${inputClass} bg-opacity-90 backdrop-blur-md transition-all duration-300 translate-x-full opacity-0 group-hover/panel:translate-x-0 group-hover/panel:opacity-100 mr-0`}
           >
             {/* BG Control */}
             {(bgImage || bgVideo || bgEmbed) && (
