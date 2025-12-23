@@ -1414,8 +1414,8 @@ export default function App() {
       >
         <div className="sticky top-0 z-30 w-full flex flex-col pt-4 px-4 gap-2 pointer-events-none">
           <div className="pointer-events-auto w-full max-w-7xl mx-auto flex items-center justify-between gap-3 relative">
-            {/* CLOCK DESKTOP: Now responsive, on the left */}
-            <div className="hidden sm:block min-w-[120px]">
+            {/* CLOCK DESKTOP: Hidden on mobile/tablet */}
+            <div className="hidden lg:block min-w-[120px]">
               {viewMode !== "launchpad" && (
                 <React.Suspense
                   fallback={
@@ -1635,19 +1635,19 @@ export default function App() {
             <div className="hidden sm:block min-w-[120px]"></div>
           </div>
 
+          {/* CLOCK MOBILE/TABLET: Below search bar on narrow screens */}
+          {viewMode !== "launchpad" && (
+            <div className="lg:hidden w-full flex justify-center mt-1">
+              <React.Suspense fallback={null}>
+                <Clock utcOffset={utcOffset} className="text-sm opacity-80" />
+              </React.Suspense>
+            </div>
+          )}
+
           {/* PAGINATION & CLOCK MOBILE */}
           {totalPages > 1 && (
-            <div className="pointer-events-auto w-full max-w-2xl mx-auto flex justify-center mb-1 relative fixed bottom-8 left-0 right-0 z-50 pointer-events-none">
+            <div className="pointer-events-auto w-full max-w-2xl mx-auto flex justify-center mb-1 relative fixed bottom-2 left-0 right-0 z-50 pointer-events-none">
               <div className="pointer-events-auto">
-                {/* CLOCK MOBILE: Left of Pagination */}
-                {viewMode !== "launchpad" && (
-                  <div className="sm:hidden absolute left-6 top-1/2 -translate-y-1/2">
-                    <React.Suspense fallback={null}>
-                      <Clock utcOffset={utcOffset} className="text-sm" />
-                    </React.Suspense>
-                  </div>
-                )}
-
                 <div
                   className={`flex items-center gap-3 px-3 py-1.5 rounded-full transition-all ${
                     viewMode === "launchpad" ? "transform scale-110" : ""
@@ -1726,7 +1726,7 @@ export default function App() {
         {/* GRID */}
         <div
           ref={gridWrapperRef}
-          className="max-w-7xl mx-auto px-6 pb-32 pt-8 min-h-[60vh] outline-none"
+          className="max-w-7xl mx-auto px-6 pb-48 pt-8 min-h-[60vh] outline-none"
           style={{ overflow: "hidden" }}
           onWheel={(e) => {
             e.preventDefault();
