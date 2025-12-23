@@ -139,6 +139,7 @@ export default function App() {
     [insightsData, setInsightsData] = useState(null),
     [loginCreds, setLoginCreds] = useState({ username: "", password: "" }),
     [loginError, setLoginError] = useState(""),
+    [showConfig, setShowConfig] = useState(false),
     [showMenu, setShowMenu] = useState(false),
     [sortBy, setSortBy] = useState("default"),
     [tenant, setTenant] = useState(() =>
@@ -1788,7 +1789,7 @@ export default function App() {
 
                       <div
                         ref={gIdx === 0 ? gridRef : null}
-                        className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-4 justify-items-center mt-2"
+                        className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-9 gap-4 justify-items-center mt-2"
                       >
                         {items.map((i) => (
                           <React.Suspense
@@ -1912,13 +1913,22 @@ export default function App() {
 
         <div className="fixed right-0 top-1/2 -translate-y-1/2 z-50 flex items-center group/panel pointer-events-none">
           {/* Trigger Handle - Invisible by default, reveals on hover */}
-          <div className="pointer-events-auto w-6 h-24 flex items-center justify-end pr-0 cursor-pointer peer transition-all duration-300">
-            <div className="w-1.5 h-16 bg-gray-400/40 opacity-0 group-hover/panel:opacity-100 hover:!bg-gray-400/60 backdrop-blur-[1px] rounded-l-full transition-all duration-300" />
+          <div
+            className="pointer-events-auto w-6 h-24 flex items-center justify-end pr-0 cursor-pointer peer transition-all duration-300"
+            onClick={() => setShowConfig(!showConfig)}
+          >
+            <div
+              className={`w-1.5 h-16 bg-gray-400/40 opacity-0 group-hover/panel:opacity-100 hover:!bg-gray-400/60 backdrop-blur-[1px] rounded-l-full transition-all duration-300 ${
+                showConfig ? "bg-gray-400/60 opacity-100" : ""
+              }`}
+            />
           </div>
 
-          {/* Config Menu - Reveals on hover of trigger or menu itself */}
+          {/* Config Menu - Reveals on hover of trigger or menu itself OR if functionality toggled */}
           <div
-            className={`pointer-events-auto flex flex-col items-center gap-2 p-2 rounded-l-3xl border shadow-lg ${inputClass} bg-opacity-90 backdrop-blur-md transition-all duration-300 translate-x-full opacity-0 peer-hover:translate-x-0 peer-hover:opacity-100 hover:translate-x-0 hover:opacity-100 mr-0`}
+            className={`pointer-events-auto flex flex-col items-center gap-2 p-2 rounded-l-3xl border shadow-lg ${inputClass} bg-opacity-90 backdrop-blur-md transition-all duration-300 translate-x-full opacity-0 peer-hover:translate-x-0 peer-hover:opacity-100 hover:translate-x-0 hover:opacity-100 mr-0 ${
+              showConfig ? "!translate-x-0 !opacity-100" : ""
+            }`}
           >
             {/* BG Control */}
             {(bgImage || bgVideo || bgEmbed) && (
