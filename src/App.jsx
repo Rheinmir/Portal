@@ -1626,19 +1626,19 @@ export default function App() {
                     }`}
                   />
                 </button>
-
-                {/* Mobile Config Toggle (Portrait only) - Far Right & Auto-Hide */}
-                <button
-                  onClick={() => setShowConfig(!showConfig)}
-                  className="hidden portrait:flex ml-2 p-2 rounded-full shadow-sm border bg-white/50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 hover:bg-white/80 dark:hover:bg-gray-800/80 backdrop-blur-sm opacity-0 hover:opacity-100 transition-opacity duration-300"
-                >
-                  <Settings size={18} />
-                </button>
               </div>
             </div>
 
             {/* Spacer for potential right-side elements or keeping it centered */}
             <div className="hidden sm:block min-w-[120px]"></div>
+
+            {/* Mobile Config Toggle (Portrait only) - Absolute Right */}
+            <button
+              onClick={() => setShowConfig(!showConfig)}
+              className="absolute right-0 hidden portrait:flex p-2 rounded-full shadow-sm border bg-white/50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 hover:bg-white/80 dark:hover:bg-gray-800/80 backdrop-blur-sm opacity-0 hover:opacity-100 transition-opacity duration-300 z-50"
+            >
+              <Settings size={18} />
+            </button>
           </div>
 
           {/* CLOCK MOBILE/TABLET: Below search bar on narrow screens */}
