@@ -1663,7 +1663,7 @@ export default function App() {
         {/* GRID */}
         <div
           ref={gridWrapperRef}
-          className="max-w-7xl mx-auto px-6 pb-48 pt-8 min-h-[60vh] outline-none"
+          className="max-w-7xl mx-auto px-8 md:px-20 pb-48 pt-8 min-h-[60vh] outline-none"
           style={{ overflow: "hidden" }}
           onWheel={(e) => {
             e.preventDefault();
