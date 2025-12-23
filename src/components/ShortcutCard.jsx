@@ -131,7 +131,11 @@ export default function ShortcutCard({
       >
         {item.name}
       </span>
-      <div className="flex flex-wrap justify-center gap-1 mt-1 px-1">
+      <div
+        className={`flex flex-nowrap items-center justify-center gap-1 mt-1 px-1 w-full ${
+          showAllTags ? "overflow-x-auto no-scrollbar" : "overflow-hidden"
+        }`}
+      >
         {item.parent_label && (
           <span
             className="text-[8px] px-1 py-0.5 rounded-full text-white truncate max-w-[60px] shadow-sm mb-0.5"
