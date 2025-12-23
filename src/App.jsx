@@ -1431,7 +1431,7 @@ export default function App() {
               <div
                 className={`relative group/search transition-all flex items-center bg-white/50 dark:bg-gray-800/50 hover:bg-white/80 dark:hover:bg-gray-800/80 focus-within:!bg-white dark:focus-within:!bg-gray-800 rounded-full border shadow-sm overflow-hidden ${
                   viewMode === "launchpad"
-                    ? "w-2/3 max-w-lg mx-auto h-10 shadow-md"
+                    ? "w-2/3 max-w-lg h-10 shadow-md"
                     : "w-full"
                 }`}
                 style={{ borderColor: darkMode ? "#374151" : "#D8D8D8" }}
@@ -1923,14 +1923,16 @@ export default function App() {
           )}
         </div>
 
-        <div className="fixed bottom-6 right-6 z-50 pointer-events-auto opacity-0 hover:opacity-100 transition-opacity duration-300 max-w-[calc(100vw-3rem)]">
+        <div className="fixed right-6 top-1/2 -translate-y-1/2 z-50 pointer-events-auto opacity-0 hover:opacity-100 transition-opacity duration-300">
           <div
-            className={`group/menu flex flex-wrap items-center justify-end gap-2 p-2 rounded-3xl border shadow-lg ${inputClass} bg-opacity-90 backdrop-blur-md transition-all`}
+            className={`group/menu flex flex-col items-center gap-2 p-2 rounded-3xl border shadow-lg ${inputClass} bg-opacity-90 backdrop-blur-md transition-all`}
           >
             {/* BG Control */}
             {(bgImage || bgVideo || bgEmbed) && (
-              <div className="flex items-center gap-1 bg-black/40 rounded-full px-2 py-1 backdrop-blur-sm">
-                <span className="text-[10px] text-white/90 font-bold">BG</span>
+              <div className="flex flex-col items-center gap-1 bg-black/40 rounded-2xl px-1 py-2 backdrop-blur-sm">
+                <span className="text-[9px] text-white/90 font-bold tracking-wider">
+                  BG
+                </span>
                 <input
                   type="range"
                   min="0"
@@ -1943,7 +1945,11 @@ export default function App() {
                     localStorage.setItem("overlayOpacity", v);
                     if (isAdmin) saveConfig("overlay_opacity", v);
                   }}
-                  className="w-16 h-1 accent-[#009FB8] cursor-pointer"
+                  className="h-16 w-1 accent-[#009FB8] cursor-pointer appearance-none -order-1"
+                  style={{
+                    writingMode: "bt-lr",
+                    WebkitAppearance: "slider-vertical",
+                  }}
                 />
               </div>
             )}
@@ -1960,7 +1966,7 @@ export default function App() {
               )}
             </button>
 
-            <div className="w-px h-4 bg-gray-300 mx-1"></div>
+            <div className="h-px w-4 bg-gray-300 my-1"></div>
 
             {/* Text Color Picker */}
             <div className="relative z-50">
@@ -1977,7 +1983,7 @@ export default function App() {
               </button>
 
               {showColorPicker && (
-                <div className="color-picker-popover absolute bottom-full mb-3 left-1/2 -translate-x-1/2 p-3 rounded-xl bg-white dark:bg-gray-800 shadow-xl border border-gray-200 dark:border-gray-700 min-w-[120px] flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-2">
+                <div className="color-picker-popover absolute right-full mr-3 top-1/2 -translate-y-1/2 p-3 rounded-xl bg-white dark:bg-gray-800 shadow-xl border border-gray-200 dark:border-gray-700 min-w-[120px] flex flex-col gap-2 animate-in fade-in slide-in-from-right-2">
                   <div className="grid grid-cols-[auto_1fr] gap-2 items-center">
                     <input
                       type="color"
@@ -2008,7 +2014,7 @@ export default function App() {
               )}
             </div>
 
-            <div className="w-px h-4 bg-gray-300 mx-1"></div>
+            <div className="h-px w-4 bg-gray-300 my-1"></div>
 
             {/* Media Controls */}
             <button
@@ -2024,29 +2030,39 @@ export default function App() {
               accept="image/*,video/*"
               onChange={handleBgUpload}
             />
-            <div className="hidden sm:flex items-center gap-1 ml-1">
-              <input
-                type="text"
-                placeholder={t("image_gif_link")}
-                className={`px-2 py-1 text-[11px] rounded-full border max-w-[120px] ${inputClass}`}
-                value={bgUrlInput}
-                onChange={(e) => setBgUrlInput(e.target.value)}
-              />
+            {/* Link input hidden in vertical mode or changed to popover? For simplicity, hiding it or using a prompt might be better, OR a popover. Given the tight space, let's make it a popover trigger or just keep it simple. Actually, the original code had an input field. In vertical mode, an input field ruins the width. Let's make it a button that toggles a popover for the input. */}
+
+            <div className="relative group/bg-link">
               <button
-                type="button"
-                onClick={applyBgUrl}
-                className="px-2 py-1 text-[11px] rounded-full border border-gray-400/50 hover:bg-gray-200 dark:hover:bg-gray-700"
+                className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"
+                title={t("image_gif_link")}
               >
-                {t("set")}
+                <Link size={16} />
               </button>
+              <div className="absolute right-full mr-3 top-1/2 -translate-y-1/2 hidden group-hover/bg-link:flex items-center gap-1 p-2 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700">
+                <input
+                  type="text"
+                  placeholder={t("image_gif_link")}
+                  className={`px-2 py-1 text-[11px] rounded-lg border w-32 ${inputClass}`}
+                  value={bgUrlInput}
+                  onChange={(e) => setBgUrlInput(e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={applyBgUrl}
+                  className="px-2 py-1 text-[11px] rounded-lg border border-gray-400/50 hover:bg-gray-200 dark:hover:bg-gray-700"
+                >
+                  {t("set")}
+                </button>
+              </div>
             </div>
 
             {/* Language Switcher */}
-            <div className="relative group/lang ml-1">
+            <div className="relative group/lang">
               <select
                 value={lang}
                 onChange={(e) => setLang(e.target.value)}
-                className={`appearance-none bg-black/5 dark:bg-white/10 text-xs font-bold uppercase rounded-xl px-2 py-1.5 pr-5 cursor-pointer outline-none hover:bg-black/10 dark:hover:bg-white/20 transition-all text-gray-700 dark:text-gray-300 border-none`}
+                className={`appearance-none bg-transparent w-8 text-xs font-bold uppercase text-center cursor-pointer outline-none hover:text-blue-500 transition-all text-gray-700 dark:text-gray-300 border-none p-0`}
               >
                 {["vn", "en", "de", "kz", "ka", "ru"].map((l) => (
                   <option key={l} value={l} className="text-black">
@@ -2054,25 +2070,11 @@ export default function App() {
                   </option>
                 ))}
               </select>
-              <div className="absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none opacity-50">
-                <svg
-                  width="8"
-                  height="8"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="3"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M6 9l6 6 6-6" />
-                </svg>
-              </div>
             </div>
 
             {isAdmin && (
               <>
-                <div className="w-px h-4 bg-gray-300 mx-1"></div>
+                <div className="h-px w-4 bg-gray-300 my-1"></div>
                 <button
                   onClick={fetchInsights}
                   className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-orange-500"
@@ -2105,7 +2107,7 @@ export default function App() {
                   accept=".json"
                   onChange={handleImportData}
                 />
-                <div className="w-px h-4 bg-gray-300 mx-1"></div>
+                <div className="h-px w-4 bg-gray-300 my-1"></div>
                 <button
                   onClick={() => setShowSettingsModal(true)}
                   className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"
@@ -2123,14 +2125,7 @@ export default function App() {
             )}
             {!isAdmin && (
               <>
-                <div className="w-px h-4 bg-gray-300 mx-1"></div>
-                <button
-                  onClick={handleClearMedia}
-                  className="p-2 hover:bg-red-100 dark:hover:bg-red-900 rounded-full text-red-500"
-                  title="Xóa nền"
-                >
-                  <Trash2 size={16} />
-                </button>
+                <div className="h-px w-4 bg-gray-300 my-1"></div>
                 {localStorage.getItem("custom_bg") && (
                   <button
                     onClick={handleResetBg}
@@ -2139,6 +2134,13 @@ export default function App() {
                     <RotateCcw size={16} />
                   </button>
                 )}
+                <button
+                  onClick={handleClearMedia}
+                  className="p-2 hover:bg-red-100 dark:hover:bg-red-900 rounded-full text-red-500"
+                  title="Xóa nền"
+                >
+                  <Trash2 size={16} />
+                </button>
                 <button
                   onClick={() => setShowLoginModal(true)}
                   className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"
