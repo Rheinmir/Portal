@@ -1143,8 +1143,14 @@ export default function App() {
       const cardEl = gridRef.current.querySelector("[data-card]");
       const cardHeight = cardEl ? cardEl.getBoundingClientRect().height : 140;
       const wrapperRect = gridWrapperRef.current.getBoundingClientRect();
-      const availableHeight = window.innerHeight - wrapperRect.top - 80;
-      const rows = Math.max(1, Math.floor(availableHeight / cardHeight));
+      const bottomBuffer = viewMode === "launchpad" ? 140 : 80;
+      const availableHeight =
+        window.innerHeight - wrapperRect.top - bottomBuffer;
+      const gap = 16; // gap-4 is 1rem = 16px
+      const rows = Math.max(
+        1,
+        Math.floor((availableHeight + gap) / (cardHeight + gap))
+      );
       const cols = colCount; // from style above
 
       setColCount(cols);
@@ -1381,15 +1387,17 @@ export default function App() {
         <div className="sticky top-0 z-30 w-full flex flex-col pt-4 px-4 gap-2 pointer-events-none">
           <div className="pointer-events-auto w-full max-w-7xl mx-auto flex items-center justify-between gap-3 relative">
             {/* CLOCK DESKTOP: Now responsive, on the left */}
-            <div className="hidden sm:block min-w-[120px]">
-              <React.Suspense
-                fallback={
-                  <div className="h-8 w-24 bg-gray-200/20 rounded animate-pulse" />
-                }
-              >
-                <Clock utcOffset={utcOffset} />
-              </React.Suspense>
-            </div>
+            {viewMode !== "launchpad" && (
+              <div className="hidden sm:block min-w-[120px]">
+                <React.Suspense
+                  fallback={
+                    <div className="h-8 w-24 bg-gray-200/20 rounded animate-pulse" />
+                  }
+                >
+                  <Clock utcOffset={utcOffset} />
+                </React.Suspense>
+              </div>
+            )}
 
             <div className="flex-1 flex items-center justify-center gap-2 max-w-2xl">
               <div
@@ -1579,11 +1587,13 @@ export default function App() {
                 }`}
               >
                 {/* CLOCK MOBILE: Left of Pagination */}
-                <div className="sm:hidden absolute left-6 top-1/2 -translate-y-1/2">
-                  <React.Suspense fallback={null}>
-                    <Clock utcOffset={utcOffset} className="text-sm" />
-                  </React.Suspense>
-                </div>
+                {viewMode !== "launchpad" && (
+                  <div className="sm:hidden absolute left-6 top-1/2 -translate-y-1/2">
+                    <React.Suspense fallback={null}>
+                      <Clock utcOffset={utcOffset} className="text-sm" />
+                    </React.Suspense>
+                  </div>
+                )}
 
                 <div
                   className={`flex items-center gap-3 px-3 py-1.5 rounded-full bg-gray-100/80 dark:bg-gray-800/80 border border-gray-300/60 dark:border-gray-700/60 backdrop-blur-sm shadow-sm ${
