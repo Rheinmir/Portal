@@ -1458,8 +1458,6 @@ export default function App() {
                   </div>
                 )}
 
-              </div>
-
                 <input
                   type="text"
                   className={`block w-full px-2 py-2 text-sm focus:outline-none bg-transparent ${
