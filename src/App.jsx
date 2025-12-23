@@ -1911,13 +1911,13 @@ export default function App() {
           )}
         </div>
 
-        <div className="fixed right-0 top-1/2 -translate-y-1/2 z-50 flex items-center group/panel">
-          {/* Trigger Handle - Visible when menu is hidden */}
-          <div className="w-1.5 h-16 bg-gray-400/30 hover:bg-gray-400/60 backdrop-blur-sm rounded-l-full cursor-pointer transition-all duration-300 group-hover/panel:opacity-0 group-hover/panel:translate-x-full" />
+        <div className="fixed right-0 top-1/2 -translate-y-1/2 z-50 flex items-center group/panel pointer-events-none">
+          {/* Trigger Handle - Visible but subtle */}
+          <div className="pointer-events-auto w-1.5 h-16 bg-gray-400/5 hover:bg-gray-400/40 backdrop-blur-[1px] hover:backdrop-blur-sm rounded-l-full cursor-pointer transition-all duration-300 peer" />
 
-          {/* Config Menu - Reveals on hover */}
+          {/* Config Menu - Reveals on hover of trigger or menu itself */}
           <div
-            className={`flex flex-col items-center gap-2 p-2 rounded-l-3xl border shadow-lg ${inputClass} bg-opacity-90 backdrop-blur-md transition-all duration-300 translate-x-full opacity-0 group-hover/panel:translate-x-0 group-hover/panel:opacity-100 mr-0`}
+            className={`pointer-events-auto flex flex-col items-center gap-2 p-2 rounded-l-3xl border shadow-lg ${inputClass} bg-opacity-90 backdrop-blur-md transition-all duration-300 translate-x-full opacity-0 peer-hover:translate-x-0 peer-hover:opacity-100 hover:translate-x-0 hover:opacity-100 mr-0`}
           >
             {/* BG Control */}
             {(bgImage || bgVideo || bgEmbed) && (
@@ -2118,14 +2118,13 @@ export default function App() {
             {!isAdmin && (
               <>
                 <div className="h-px w-4 bg-gray-300 my-1"></div>
-                {localStorage.getItem("custom_bg") && (
-                  <button
-                    onClick={handleResetBg}
-                    className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-orange-500"
-                  >
-                    <RotateCcw size={16} />
-                  </button>
-                )}
+                <button
+                  onClick={handleResetBg}
+                  className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-orange-500"
+                  title={t("reset_bg")}
+                >
+                  <RotateCcw size={16} />
+                </button>
                 <button
                   onClick={handleClearMedia}
                   className="p-2 hover:bg-red-100 dark:hover:bg-red-900 rounded-full text-red-500"
@@ -2194,6 +2193,7 @@ export default function App() {
             inputClass={inputClass}
             darkMode={darkMode}
             isEdit={!!formData.id}
+            isAdmin={isAdmin}
           />
         </React.Suspense>
         <React.Suspense fallback={null}>
