@@ -1427,7 +1427,7 @@ export default function App() {
 
             <div className="flex-1 flex items-center justify-center gap-2 max-w-2xl">
               <div
-                className={`relative group/search transition-all flex items-center bg-white dark:bg-gray-800 rounded-full border shadow-sm focus-within:ring-2 focus-within:ring-[#009FB8] overflow-hidden ${
+                className={`relative group/search transition-all flex items-center bg-white/50 dark:bg-gray-800/50 hover:bg-white/80 dark:hover:bg-gray-800/80 focus-within:!bg-white dark:focus-within:!bg-gray-800 rounded-full border shadow-sm overflow-hidden ${
                   viewMode === "launchpad"
                     ? "w-2/3 max-w-lg mx-auto h-10 shadow-md"
                     : "w-full"
