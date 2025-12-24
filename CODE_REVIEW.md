@@ -25,6 +25,15 @@ This document outlines a technical review of the `shortcut-manager-sqlite-server
   - **Memoization**: `useMemo` is heavily used for filtering and sorting logic.
   - **Lazy Loading**: All valid heavy components and modals are code-split using `React.lazy`, reducing the initial bundle size.
   - **Build Optimization**: Vite config now uses manual chunk splitting to separate `vendor` and `ui` libraries.
+  - **Mobile Optimization**: 
+    - Configuration menu relocated to header/edge for better accessibility.
+    - Grid density optimized for portrait mode (5 columns).
+    - Touch-optimized interactions (click-to-expand sub-tags, toggles).
+
+### 5. Recent UX Enhancements
+- **Launchpad Mode**: A new view mode mimicking macOS Launchpad with large icons, hidden clock, and streamlined layout.
+- **Sub-tag Interactions**: Compact single-line display with "expand" capability to maintain cleaner cards.
+- **Header Refinement**: Collapsible menu for view controls and auto-hiding "Settings" trigger for a cleaner interface.
 
 ## Summary
 The project works for personal use but requires significant refactoring for production readiness or team collaboration. The immediate strict dependency on a single large file is the biggest bottleneck for future development.

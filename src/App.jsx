@@ -1635,7 +1635,9 @@ export default function App() {
             {/* Mobile Config Toggle (Portrait only) - Absolute Right */}
             <button
               onClick={() => setShowConfig(!showConfig)}
-              className="absolute right-0 hidden portrait:flex p-2 rounded-full shadow-sm border bg-white/50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 hover:bg-white/80 dark:hover:bg-gray-800/80 backdrop-blur-sm opacity-0 hover:opacity-100 transition-opacity duration-300 z-50"
+              className={`absolute right-0 hidden portrait:flex p-2 rounded-full shadow-sm border bg-white/50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 hover:bg-white/80 dark:hover:bg-gray-800/80 backdrop-blur-sm opacity-0 hover:opacity-100 transition-all duration-300 z-50 ${
+                showMenu ? "translate-y-12" : ""
+              }`}
             >
               <Settings size={18} />
             </button>
@@ -1643,7 +1645,7 @@ export default function App() {
 
           {/* CLOCK MOBILE/TABLET: Below search bar on narrow screens */}
           {viewMode !== "launchpad" && (
-            <div className="lg:hidden w-full flex justify-center mt-1">
+            <div className="lg:hidden portrait:hidden w-full flex justify-center mt-1">
               <React.Suspense fallback={null}>
                 <Clock utcOffset={utcOffset} className="text-sm opacity-80" />
               </React.Suspense>

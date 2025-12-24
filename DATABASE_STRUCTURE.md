@@ -60,6 +60,19 @@ Lưu lịch sử click chi tiết để vẽ biểu đồ thống kê.
 | `shortcut_id` | INTEGER | ID của shortcut được click |
 | `clicked_at` | DATETIME | Thời điểm click |
 
+## 6. Bảng `image_search_logs`
+Lưu nhật ký tìm kiếm bằng hình ảnh để theo dõi và bảo mật.
+
+| Cột | Kiểu | Mô tả |
+| :--- | :--- | :--- |
+| `id` | INTEGER | PK |
+| `client_ip` | TEXT | IP người dùng |
+| `user_agent` | TEXT | Trình duyệt/Thiết bị |
+| `file_size` | INTEGER | Kích thước file (bytes) |
+| `file_type` | TEXT | Định dạng (MIME type) |
+| `filename` | TEXT | Tên file gốc |
+| `searched_at` | DATETIME | Thời gian tìm kiếm |
+
 ---
 
 # Quy trình Xử lý Optimistic UI (Favorite)

@@ -37,6 +37,9 @@ Located inside the sticky header section.
   - Hover actions: Copy URL, Edit (Admin), Delete (Admin).
   - Favorite toggle (Star icon).
   - Displays Icon (or generated letter avatar) and Labels (Parent/Child).
+  - **Sub-tag Logic**: 
+    - Compact Mode: Shows first tag + "+" indicator.
+    - Expanded Mode: Click to reveal all tags in a single scrollable line.
 
 **Usage in `App.jsx`**:
 Rendered inside the main `.map()` loop of the grid.
@@ -158,3 +161,20 @@ Conditionally rendered when `showInsightsModal` is true.
 ```jsx
 <Clock utcOffset={utcOffset} className="...classes..." />
 ```
+
+---
+
+## 6. Header Components
+
+### CollapsibleMenu (Inline in `App.jsx`)
+**Functionality**:
+- Groups less critical view controls (View Mode, Filter, Group By, Sort) into a sliding menu.
+- **Trigger**: Chevron icon that rotates on toggle.
+- **Animation**: Uses CSS transitions for width/opacity to create a smooth slide-out effect.
+
+### SettingsTrigger (Inline in `App.jsx`)
+**Functionality**:
+- **Desktop/Landscape**: Hidden in favor of edge-hover menu.
+- **Mobile/Portrait**: A dedicated "Settings" (Gear) icon positioned absolutely at the top-right.
+- **Behavior**: Initially invisible (`opacity-0`), reveals on hover/tap to prevent UI clutter.
+

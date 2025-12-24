@@ -4,6 +4,7 @@ A self-hosted, personal dashboard for managing web shortcuts. Features a modern 
 
 ## Features
 - **Dashboard**: Grid view of shortcuts with customizable icons and colors.
+- **Launchpad Mode**: macOS-style grid layout with large icons and simplified interface for focused access.
 - **Admin Mode**: Manage shortcuts, bulk import/export, and customize text/background.
 - **Insights**: Track click history, top apps, and usage trends.
 - **Theming**: Dark mode support, custom background images/videos.
