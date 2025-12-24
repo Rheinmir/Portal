@@ -1341,6 +1341,26 @@ export default function App() {
     (_, i) => dotStart + i
   );
 
+  const handleTagClick = (tag, type) => {
+    // Sync with filter menu by opening it
+    setShowMenu(true);
+
+    if (type === "parent") {
+      if (activeParentFilter === tag) {
+        setActiveParentFilter("all");
+      } else {
+        setActiveParentFilter(tag);
+        setActiveChildFilter("all");
+      }
+    } else if (type === "child") {
+      if (activeChildFilter === tag) {
+        setActiveChildFilter("all");
+      } else {
+        setActiveChildFilter(tag);
+      }
+    }
+  };
+
   return (
     <div
       className={`min-h-screen font-light transition-all duration-300 bg-cover bg-center bg-no-repeat bg-fixed ${bgClass}`}
@@ -1429,7 +1449,7 @@ export default function App() {
               )}
             </div>
 
-            <div className="flex-1 flex items-center justify-center gap-2 max-w-2xl">
+            <div className="flex-1 flex items-center justify-center gap-2 max-w-2xl mx-auto">
               <div
                 className={`relative group/search transition-all flex items-center bg-white/50 dark:bg-gray-800/50 hover:bg-white/80 dark:hover:bg-gray-800/80 focus-within:!bg-white dark:focus-within:!bg-gray-800 rounded-full border shadow-sm overflow-hidden ${"w-2/3 max-w-lg h-10 shadow-md"}`}
                 style={{ borderColor: darkMode ? "#374151" : "#D8D8D8" }}
@@ -1630,7 +1650,8 @@ export default function App() {
             </div>
 
             {/* Spacer for potential right-side elements or keeping it centered */}
-            <div className="hidden sm:block min-w-[120px]"></div>
+            {/* Spacer for potential right-side elements or keeping it centered */}
+            <div className="hidden lg:block min-w-[120px]"></div>
 
             {/* Mobile Config Toggle (Portrait only) - Absolute Right */}
             <button
@@ -1726,6 +1747,7 @@ export default function App() {
                     darkMode={darkMode}
                     getContrastYIQ={getContrastYIQ}
                     viewMode={viewMode}
+                    handleTagClick={handleTagClick}
                   />
                 </React.Suspense>
               ))}
@@ -1825,6 +1847,7 @@ export default function App() {
                               draggingId={draggingId}
                               darkMode={darkMode}
                               getContrastYIQ={getContrastYIQ}
+                              handleTagClick={handleTagClick}
                             />
                           </React.Suspense>
                         ))}

@@ -19,6 +19,7 @@ export default function ShortcutCard({
   darkMode,
   getContrastYIQ,
   viewMode,
+  handleTagClick,
 }) {
   const [copiedId, setCopiedId] = useState(null);
   const [showAllTags, setShowAllTags] = useState(false);
@@ -131,14 +132,64 @@ export default function ShortcutCard({
       >
         {item.name}
       </span>
-      <div
-        className={`flex flex-nowrap items-center justify-center gap-1 mt-1 px-1 w-full ${
-          showAllTags ? "overflow-x-auto no-scrollbar" : "overflow-hidden"
-        }`}
-      >
+      {/* TAG POPOVER */}
+      {showAllTags &&
+        (item.child_label || "").split(",").filter((t) => t.trim()).length >
+          0 && (
+          <>
+            {/* Backdrop for click-outside */}
+            <div
+              className="fixed inset-0 z-40 cursor-default"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowAllTags(false);
+              }}
+            />
+            {/* Popover Content */}
+            <div
+              className="absolute bottom-16 left-1/2 -translate-x-1/2 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-xl rounded-xl p-2 w-[max-content] max-w-[180px] flex flex-wrap justify-center gap-1 animate-in fade-in zoom-in-95 duration-200 cursor-default"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {(item.child_label || "")
+                .split(",")
+                .filter((t) => t.trim())
+                .map((t) => (
+                  <span
+                    key={t}
+                    className={`text-[10px] px-2 py-1 rounded-md border bg-gray-50 dark:bg-gray-700/50 cursor-pointer hover:opacity-80 ${
+                      darkMode
+                        ? "border-gray-600 text-gray-200"
+                        : "border-gray-200 text-gray-700"
+                    }`}
+                    onClick={(e) => {
+                      if (e.shiftKey && handleTagClick) {
+                        e.stopPropagation();
+                        handleTagClick(t.trim(), "child");
+                        setShowAllTags(false);
+                      }
+                    }}
+                    style={{
+                      borderColor: labelColors[t?.trim()],
+                      color: labelColors[t?.trim()],
+                    }}
+                  >
+                    {t.trim()}
+                  </span>
+                ))}
+            </div>
+          </>
+        )}
+
+      <div className="flex flex-nowrap items-center justify-center gap-1 mt-1 px-1 w-full overflow-hidden">
         {item.parent_label && (
           <span
-            className="text-[8px] px-1 py-0.5 rounded-full text-white truncate max-w-[60px] shadow-sm mb-0.5"
+            className="text-[8px] px-1 py-0.5 rounded-full text-white truncate max-w-[60px] shadow-sm mb-0.5 cursor-pointer hover:opacity-80"
+            onClick={(e) => {
+              if (e.shiftKey && handleTagClick) {
+                e.stopPropagation();
+                handleTagClick(item.parent_label, "parent");
+              }
+            }}
             style={{
               background: labelColors[item.parent_label] || "#9CA3AF",
               color: getContrastYIQ(
@@ -155,47 +206,34 @@ export default function ShortcutCard({
             .filter((t) => t.trim());
           if (tags.length === 0) return null;
 
-          // If showing all or only 1 tag, simple map
-          if (showAllTags || tags.length === 1) {
-            return tags.map((t) => (
-              <span
-                key={t}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (tags.length > 1) setShowAllTags(!showAllTags);
-                }}
-                className={`text-[8px] px-1 py-0.5 rounded-full border truncate max-w-[60px] bg-white/50 backdrop-blur-sm cursor-pointer hover:bg-white/80 ${
-                  darkMode ? "border-gray-600" : "border-gray-300"
-                }`}
-                style={{
-                  borderColor: labelColors[t?.trim()],
-                  color: labelColors[t?.trim()] || (darkMode ? "#ddd" : "#333"),
-                }}
-                title={tags.length > 1 ? "Click to collapse" : ""}
-              >
-                {t.trim()}
-              </span>
-            ));
-          }
-
-          // Compact view: Show first tag + " +"
+          // Always compact view in the card footer
           const firstTag = tags[0].trim();
+          const hasMore = tags.length > 1; // Or even > 0 if we want popover for single tag too? User said "click to show all.. blue underline..". Implies focus.
+          // Let's enable popover for ANY tag click to see full name clearly.
+
           return (
             <span
               onClick={(e) => {
                 e.stopPropagation();
-                setShowAllTags(true);
+                if (e.shiftKey && handleTagClick) {
+                  handleTagClick(firstTag, "child");
+                } else {
+                  setShowAllTags(true);
+                }
               }}
-              className={`text-[8px] px-1 py-0.5 rounded-full border truncate max-w-[60px] bg-white/50 backdrop-blur-sm cursor-pointer hover:bg-white/80 flex items-center gap-0.5 ${
+              className={`text-[8px] px-1 py-0.5 rounded-full border truncate max-w-[60px] bg-white/50 backdrop-blur-sm flex items-center gap-0.5 cursor-pointer hover:bg-white/80 ${
                 darkMode ? "border-gray-600" : "border-gray-300"
               }`}
               style={{
                 borderColor: labelColors[firstTag],
                 color: labelColors[firstTag] || (darkMode ? "#ddd" : "#333"),
               }}
-              title="Click to show all tags"
+              title="Click to show full tags"
             >
-              {firstTag} <span className="font-bold opacity-70 ml-0.5">+</span>
+              {firstTag}{" "}
+              {hasMore && (
+                <span className="font-bold opacity-70 ml-0.5">+</span>
+              )}
             </span>
           );
         })()}
