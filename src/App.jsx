@@ -34,7 +34,6 @@ import { useLanguage } from "./contexts/LanguageContext";
 const ShortcutCard = React.lazy(() => import("./components/ShortcutCard"));
 const InsightsModal = React.lazy(() => import("./components/InsightsModal"));
 const FilterPanel = React.lazy(() => import("./components/FilterPanel"));
-const Clock = React.lazy(() => import("./components/Clock"));
 const ConfirmDialog = React.lazy(() => import("./components/ConfirmDialog"));
 
 // Lazy load named exports
@@ -181,6 +180,26 @@ export default function App() {
     gridRef = useRef(null),
     searchContainerRef = useRef(null),
     filterPanelRef = useRef(null);
+
+  const [timeStr, setTimeStr] = useState("");
+
+  useEffect(() => {
+    const updateTime = () => {
+      const d = new Date();
+      const utc = d.getTime() + d.getTimezoneOffset() * 60000;
+      const nd = new Date(utc + 3600000 * utcOffset);
+      setTimeStr(
+        nd.toLocaleTimeString("en-US", {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        })
+      );
+    };
+    updateTime();
+    const timer = setInterval(updateTime, 1000);
+    return () => clearInterval(timer);
+  }, [utcOffset]);
 
   useEffect(() => {
     const html = document.documentElement;
@@ -1452,15 +1471,7 @@ export default function App() {
           <div className="pointer-events-auto w-full max-w-7xl mx-auto flex items-center justify-between gap-3 relative">
             {/* CLOCK DESKTOP: Hidden on mobile/tablet */}
             <div className="hidden lg:block min-w-[120px]">
-              {viewMode !== "launchpad" && (
-                <React.Suspense
-                  fallback={
-                    <div className="h-8 w-24 bg-gray-200/20 rounded animate-pulse" />
-                  }
-                >
-                  <Clock utcOffset={utcOffset} />
-                </React.Suspense>
-              )}
+              {/* Clock removed, integrated into search placeholder */}
             </div>
 
             <div className="flex-1 flex items-center justify-center gap-2 max-w-2xl mx-auto">
@@ -1504,7 +1515,7 @@ export default function App() {
                   placeholder={
                     searchPreview
                       ? "Google Image Search..."
-                      : t("search_placeholder")
+                      : `${timeStr}   ${t("search_placeholder")}`
                   }
                   value={searchTerm}
                   onFocus={() => setShowFilterPanel(true)}
@@ -1662,14 +1673,7 @@ export default function App() {
             </button>
           </div>
 
-          {/* CLOCK MOBILE/TABLET: Below search bar on narrow screens */}
-          {viewMode !== "launchpad" && (
-            <div className="lg:hidden portrait:hidden w-full flex justify-center mt-1">
-              <React.Suspense fallback={null}>
-                <Clock utcOffset={utcOffset} className="text-sm opacity-80" />
-              </React.Suspense>
-            </div>
-          )}
+          {/* CLOCK MOBILE/TABLET: Removed */}
 
           {/* PAGINATION & CLOCK MOBILE */}
 

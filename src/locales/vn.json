@@ -64,5 +64,6 @@
   "invalid_credentials": "Sai thông tin đăng nhập",
   "import_successful": "Nhập dữ liệu thành công!",
   "group_by_tag": "Nhóm theo thẻ",
-  "uncategorized": "Chưa phân loại"
+  "uncategorized": "Chưa phân loại",
+  "expand": "Mở rộng"
 }

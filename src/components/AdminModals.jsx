@@ -379,7 +379,7 @@ export function AddEditModal({
                   onClick={() => setIsExpanded(true)}
                   className="text-xs text-blue-500 hover:text-blue-600 font-medium flex items-center gap-1 transition-colors"
                 >
-                  {t("expand_more") || "Expand"} <ChevronDown size={14} />
+                  {t("expand")} <ChevronDown size={14} />
                 </button>
               </div>
             )}

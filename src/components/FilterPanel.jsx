@@ -18,7 +18,7 @@ export default function FilterPanel({
     <div
       className={`pointer-events-auto w-full max-w-5xl mx-auto rounded-2xl p-3 shadow-lg flex flex-col gap-2 border ${modalClass} bg-opacity-95 backdrop-blur-md`}
     >
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2 items-center">
         <span className="text-xs font-bold uppercase opacity-60">Nhóm:</span>
         <button
           onClick={() => setActiveParentFilter(null)}
@@ -49,7 +49,7 @@ export default function FilterPanel({
         ))}
       </div>
       {uniqueChildren.length > 0 && (
-        <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-500/20">
+        <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-500/20 items-center">
           <span className="text-xs font-bold opacity-60">Tag:</span>
           {uniqueChildren.map((l) => (
             <button
