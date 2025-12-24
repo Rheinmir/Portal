@@ -178,7 +178,9 @@ export default function App() {
     bgInputRef = useRef(null),
     importInputRef = useRef(null),
     gridWrapperRef = useRef(null),
-    gridRef = useRef(null);
+    gridRef = useRef(null),
+    searchContainerRef = useRef(null),
+    filterPanelRef = useRef(null);
 
   useEffect(() => {
     const html = document.documentElement;
@@ -196,6 +198,7 @@ export default function App() {
   // Close color picker when clicking outside
   useEffect(() => {
     const handleClickOutside = (e) => {
+      // Color Picker
       if (
         showColorPicker &&
         !e.target.closest(".color-picker-popover") &&
@@ -203,10 +206,21 @@ export default function App() {
       ) {
         setShowColorPicker(false);
       }
+
+      // Filter Panel
+      if (
+        showFilterPanel &&
+        searchContainerRef.current &&
+        !searchContainerRef.current.contains(e.target) &&
+        filterPanelRef.current &&
+        !filterPanelRef.current.contains(e.target)
+      ) {
+        setShowFilterPanel(false);
+      }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [showColorPicker]);
+  }, [showColorPicker, showFilterPanel]);
 
   useEffect(() => {
     const handleWindowDragEnter = (e) => {
@@ -1451,6 +1465,7 @@ export default function App() {
 
             <div className="flex-1 flex items-center justify-center gap-2 max-w-2xl mx-auto">
               <div
+                ref={searchContainerRef}
                 className={`relative group/search transition-all flex items-center bg-white/50 dark:bg-gray-800/50 hover:bg-white/80 dark:hover:bg-gray-800/80 focus-within:!bg-white dark:focus-within:!bg-gray-800 rounded-full border shadow-sm overflow-hidden ${"w-2/3 max-w-lg h-10 shadow-md"}`}
                 style={{ borderColor: darkMode ? "#374151" : "#D8D8D8" }}
               >
@@ -1492,6 +1507,7 @@ export default function App() {
                       : t("search_placeholder")
                   }
                   value={searchTerm}
+                  onFocus={() => setShowFilterPanel(true)}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSearchSubmit()}
                   onPaste={handleSearchPaste}
@@ -1555,24 +1571,6 @@ export default function App() {
                     )}
                   </button>
 
-                  <React.Suspense
-                    fallback={
-                      <div className="w-9 h-9 bg-gray-200/50 rounded-full" />
-                    }
-                  >
-                    <button
-                      onClick={() => setShowFilterPanel(!showFilterPanel)}
-                      className={`p-2 rounded-full shadow-sm border transition-colors ${
-                        showFilterPanel
-                          ? "bg-white dark:bg-gray-800 text-blue-500 border-blue-500/50"
-                          : "bg-white/50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 hover:bg-white/80 dark:hover:bg-gray-800/80"
-                      } ${
-                        bgImage || bgVideo || bgEmbed ? "backdrop-blur-sm" : ""
-                      }`}
-                    >
-                      <Filter size={18} />
-                    </button>
-                  </React.Suspense>
                   <div className="flex items-center gap-1 bg-gray-200/50 dark:bg-gray-800/50 rounded-full p-1 backdrop-blur-sm">
                     <button
                       onClick={() => {
@@ -1675,20 +1673,22 @@ export default function App() {
 
           {/* PAGINATION & CLOCK MOBILE */}
 
-          <React.Suspense fallback={null}>
-            <FilterPanel
-              isOpen={showFilterPanel}
-              activeParentFilter={activeParentFilter}
-              setActiveParentFilter={setActiveParentFilter}
-              activeChildFilter={activeChildFilter}
-              setActiveChildFilter={setActiveChildFilter}
-              uniqueParents={uniqueParents}
-              uniqueChildren={uniqueChildren}
-              labelColors={labelColors}
-              modalClass={modalClass}
-              getContrastYIQ={getContrastYIQ}
-            />
-          </React.Suspense>
+          <div ref={filterPanelRef}>
+            <React.Suspense fallback={null}>
+              <FilterPanel
+                isOpen={showFilterPanel}
+                activeParentFilter={activeParentFilter}
+                setActiveParentFilter={setActiveParentFilter}
+                activeChildFilter={activeChildFilter}
+                setActiveChildFilter={setActiveChildFilter}
+                uniqueParents={uniqueParents}
+                uniqueChildren={uniqueChildren}
+                labelColors={labelColors}
+                modalClass={modalClass}
+                getContrastYIQ={getContrastYIQ}
+              />
+            </React.Suspense>
+          </div>
         </div>
 
         {/* GRID */}
