@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Copy, Check, Pencil, Trash2, Star } from "lucide-react";
+import { Copy, Check, Pencil, Trash2, Star, X } from "lucide-react";
 
 export default function ShortcutCard({
   item,
@@ -147,9 +147,18 @@ export default function ShortcutCard({
             />
             {/* Popover Content */}
             <div
-              className="absolute bottom-16 left-1/2 -translate-x-1/2 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-xl rounded-xl p-2 w-[max-content] max-w-[180px] flex flex-wrap justify-center gap-1 animate-in fade-in zoom-in-95 duration-200 cursor-default"
+              className="absolute bottom-16 left-1/2 -translate-x-1/2 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-xl rounded-xl p-2 w-[max-content] max-w-[180px] flex flex-wrap justify-center gap-1 animate-in fade-in zoom-in-95 duration-200 cursor-default pr-6"
               onClick={(e) => e.stopPropagation()}
             >
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowAllTags(false);
+                }}
+                className="absolute -top-2 -right-2 p-1 bg-white dark:bg-gray-700 rounded-full shadow border border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600"
+              >
+                <X size={10} className="text-gray-500 dark:text-gray-300" />
+              </button>
               {(item.child_label || "")
                 .split(",")
                 .filter((t) => t.trim())

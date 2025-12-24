@@ -1350,7 +1350,7 @@ export default function App() {
         setActiveParentFilter("all");
       } else {
         setActiveParentFilter(tag);
-        setActiveChildFilter("all");
+        // Do NOT reset child filter here to allow combined filtering
       }
     } else if (type === "child") {
       if (activeChildFilter === tag) {
