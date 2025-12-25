@@ -1555,33 +1555,6 @@ export default function App() {
                       : "max-w-0 opacity-0 mr-0"
                   }`}
                 >
-                  {/* Mode Toggle Button */}
-                  <button
-                    onClick={() =>
-                      setViewMode(
-                        viewMode === "default" ? "launchpad" : "default"
-                      )
-                    }
-                    className={`p-2 rounded-full shadow-sm border transition-colors ${
-                      viewMode === "launchpad"
-                        ? "bg-white dark:bg-gray-800 text-blue-500 border-blue-500/50"
-                        : "bg-white/50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 hover:bg-white/80 dark:hover:bg-gray-800/80"
-                    } ${
-                      bgImage || bgVideo || bgEmbed ? "backdrop-blur-sm" : ""
-                    }`}
-                    title={
-                      viewMode === "default"
-                        ? "Switch to Launchpad Mode"
-                        : "Switch to Default Mode"
-                    }
-                  >
-                    {viewMode === "default" ? (
-                      <Grip size={18} />
-                    ) : (
-                      <LayoutGrid size={18} />
-                    )}
-                  </button>
-
                   <div className="flex items-center gap-1 bg-gray-200/50 dark:bg-gray-800/50 rounded-full p-1 backdrop-blur-sm">
                     <button
                       onClick={() => {
