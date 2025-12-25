@@ -1780,7 +1780,7 @@ export default function App() {
                   return (
                     <div
                       key={groupName}
-                      className="relative rounded-3xl p-4 transition-all duration-500 animate-in fade-in slide-in-from-bottom-2"
+                      className="relative rounded-3xl p-4"
                       style={{
                         backgroundColor: bgWithOpacity,
                         border: `1px solid ${baseColor}30`,
