@@ -1467,7 +1467,7 @@ export default function App() {
               : "",
         }}
       >
-        <div className="sticky top-0 z-30 w-full flex flex-col pt-4 px-4 gap-2 pointer-events-none">
+        <div className="sticky top-0 z-30 w-full flex flex-col pt-2 px-4 gap-2 pointer-events-none">
           <div className="pointer-events-auto w-full max-w-7xl mx-auto flex items-center justify-between gap-3 relative">
             {/* CLOCK DESKTOP: Hidden on mobile/tablet */}
             <div className="hidden lg:block min-w-[120px]">
