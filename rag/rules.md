@@ -1,21 +1,19 @@
-# Rules
-
-## Coding Standards
-- **Language**: JavaScript (ES6+), JSX for React components.
-- **Frontend**:
-    - Functional Components with Hooks.
-    - Tailwind CSS for styling.
-    - Context API for global state (e.g., Language).
-- **Backend**:
-    - Express.js middleware pattern.
-    - `better-sqlite3` for synchronous, efficient database ops.
-    - ES Modules (`"type": "module"` in package.json).
-
-## Architecture Rules
-- Keep frontend and backend logic separate.
-- Use `src/locales` for all text content to support i18n.
-- Database access should be encapsulated in `server/database.js` or similar modules, not scattered in routes.
+# 📜 Development Rules
 
 ## AI Agent Guidelines
-1.  **RAG Maintenance**: ANY modification to the codebase (logic, architecture, workflows) MUST be accompanied by an update to the corresponding file in the `rag/` directory. This ensures the context remains the single source of truth.
-2.  **Session Start**: At the beginning of every new chat or session, the AI MUST read `rag/rules.md` first to align with project standards.
+
+1. **RAG First**: Before starting a new task, the AI must read `rag/0-INDEX.md` to understand the context.
+2. **Maintenance**: Any changes to logic or architecture must be accompanied by updates to the corresponding files in the `rag/` directory. This is the "Single Source of Truth".
+
+## Coding Standards
+
+* **Style**:
+    * Use **Functional Components** and **Hooks** for React.
+    * Use **ES6+** syntax.
+* **Naming**:
+    * **PascalCase** for Components (e.g., `ShortcutCard`).
+    * **camelCase** for variables and functions (e.g., `handleLogin`).
+* **Backend**:
+    * Use Express.js middleware pattern.
+    * Separate database access logic (in `server/database.js`) from routes.
+    * Use ES Modules (`import`/`export`).
