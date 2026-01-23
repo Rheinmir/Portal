@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { apiUrl } from "./api";
 import {
   Trash2,
   Plus,
@@ -40,17 +41,17 @@ const ConfirmDialog = React.lazy(() => import("./components/ConfirmDialog"));
 const LoginModal = React.lazy(() =>
   import("./components/AdminModals").then((module) => ({
     default: module.LoginModal,
-  }))
+  })),
 );
 const AddEditModal = React.lazy(() =>
   import("./components/AdminModals").then((module) => ({
     default: module.AddEditModal,
-  }))
+  })),
 );
 const SettingsModal = React.lazy(() =>
   import("./components/AdminModals").then((module) => ({
     default: module.SettingsModal,
-  }))
+  })),
 );
 
 const COLOR_PRESETS = [
@@ -97,7 +98,7 @@ export default function App() {
     [labelColors, setLabelColors] = useState({}),
     [loading, setLoading] = useState(true),
     [darkMode, setDarkMode] = useState(
-      () => localStorage.getItem("darkMode") === "true"
+      () => localStorage.getItem("darkMode") === "true",
     ),
     [bgImage, setBgImage] = useState(null),
     [serverBg, setServerBg] = useState(null),
@@ -109,10 +110,10 @@ export default function App() {
       return isNaN(n) ? 0.5 : n;
     });
   const [lightTextColor, setLightTextColor] = useState(
-      () => localStorage.getItem("custom_text_light") || DEFAULT_LIGHT_TEXT
+      () => localStorage.getItem("custom_text_light") || DEFAULT_LIGHT_TEXT,
     ),
     [darkTextColor, setDarkTextColor] = useState(
-      () => localStorage.getItem("custom_text_dark") || DEFAULT_DARK_TEXT
+      () => localStorage.getItem("custom_text_dark") || DEFAULT_DARK_TEXT,
     );
   const [formData, setFormData] = useState({
       id: null,
@@ -142,13 +143,13 @@ export default function App() {
     [showMenu, setShowMenu] = useState(false),
     [sortBy, setSortBy] = useState("default"),
     [tenant, setTenant] = useState(() =>
-      normalizeTenant(localStorage.getItem("tenant"))
+      normalizeTenant(localStorage.getItem("tenant")),
     ),
     [bgUrlInput, setBgUrlInput] = useState(""),
     [isEditingPage, setIsEditingPage] = useState(false),
     [pageInput, setPageInput] = useState("");
   const [viewMode, setViewMode] = useState(
-    () => localStorage.getItem("viewMode") || "default"
+    () => localStorage.getItem("viewMode") || "default",
   );
   const [utcOffset, setUtcOffset] = useState(7);
   const [showColorPicker, setShowColorPicker] = useState(false);
@@ -193,7 +194,7 @@ export default function App() {
           hour: "2-digit",
           minute: "2-digit",
           hour12: false,
-        })
+        }),
       );
     };
     updateTime();
@@ -305,26 +306,28 @@ export default function App() {
   };
   const fetchData = async () => {
     try {
-      const r = await fetch("/api/data?tenant=" + encodeURIComponent(tenant));
+      const r = await fetch(
+        apiUrl("/api/data?tenant=" + encodeURIComponent(tenant)),
+      );
       const d = await r.json();
       const ss = d.shortcuts || [];
       const ls = JSON.parse(
-        localStorage.getItem("local_shortcuts") || "[]"
+        localStorage.getItem("local_shortcuts") || "[]",
       ).map((s) => ({
         ...s,
         isLocal: true,
         child_label: (s.child_label || "").includes("Personal")
           ? s.child_label
           : s.child_label
-          ? s.child_label + ", Personal"
-          : "Personal",
+            ? s.child_label + ", Personal"
+            : "Personal",
       }));
       const deletedIds = JSON.parse(
-        localStorage.getItem("deleted_shortcuts") || "[]"
+        localStorage.getItem("deleted_shortcuts") || "[]",
       );
       const lsIds = new Set(ls.map((s) => s.id));
       const filteredServer = ss.filter(
-        (s) => !deletedIds.includes(s.id) && !lsIds.has(s.id)
+        (s) => !deletedIds.includes(s.id) && !lsIds.has(s.id),
       );
       setShortcuts([...filteredServer, ...ls]);
       setLabelColors(d.labelColors || {});
@@ -359,12 +362,12 @@ export default function App() {
         setLightTextColor(
           localStorage.getItem("custom_text_light") ||
             c.text_color_light ||
-            DEFAULT_LIGHT_TEXT
+            DEFAULT_LIGHT_TEXT,
         );
         setDarkTextColor(
           localStorage.getItem("custom_text_dark") ||
             c.text_color_dark ||
-            DEFAULT_DARK_TEXT
+            DEFAULT_DARK_TEXT,
         );
         const localOpStr = localStorage.getItem("overlayOpacity");
         if (localOpStr != null) {
@@ -396,7 +399,7 @@ export default function App() {
 
   const saveConfig = async (k, v) => {
     try {
-      await fetch("/api/config", {
+      await fetch(apiUrl("/api/config"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ [k]: v }),
@@ -555,7 +558,7 @@ export default function App() {
           const currentBg = bgEmbed || bgVideo || bgImage;
           if (currentBg) p.default_background = currentBg;
 
-          const r = await fetch("/api/config/force", {
+          const r = await fetch(apiUrl("/api/config/force"), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(p),
@@ -579,11 +582,11 @@ export default function App() {
               serverList = [...serverList].sort(
                 (a, b) =>
                   b.favorite - a.favorite ||
-                  (sortBy === "alpha" ? a.name.localeCompare(b.name) : 0)
+                  (sortBy === "alpha" ? a.name.localeCompare(b.name) : 0),
               );
             }
             const order = serverList.map((s) => s.id);
-            await fetch("/api/reorder", {
+            await fetch(apiUrl("/api/reorder"), {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ tenant, order }),
@@ -711,7 +714,7 @@ export default function App() {
         const compressedImage = await compressImage(searchPreview);
 
         // Upload image to server
-        const response = await fetch("/api/image-search", {
+        const response = await fetch(apiUrl("/api/image-search"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ image: compressedImage }),
@@ -729,9 +732,9 @@ export default function App() {
         // Open Google Lens with the image URL
         window.open(
           `https://lens.google.com/uploadbyurl?url=${encodeURIComponent(
-            publicUrl
+            publicUrl,
           )}`,
-          "_blank"
+          "_blank",
         );
 
         // Remove loading toast
@@ -785,14 +788,15 @@ export default function App() {
           if (searchFileInputRef.current) searchFileInputRef.current.value = "";
         } catch (clipErr) {
           alert(
-            t("error_copy_image") || "Could not search image. Please try again."
+            t("error_copy_image") ||
+              "Could not search image. Please try again.",
           );
         }
       }
     } else if (searchTerm.trim()) {
       window.open(
         "https://www.google.com/search?q=" + encodeURIComponent(searchTerm),
-        "_blank"
+        "_blank",
       );
     }
   };
@@ -806,13 +810,13 @@ export default function App() {
 
   const fetchInsights = async () => {
     try {
-      const r = await fetch("/api/insights");
+      const r = await fetch(apiUrl("/api/insights"));
       const insightsResult = await r.json();
 
       // Also fetch image search logs for admin
       if (isAdmin) {
         try {
-          const logsRes = await fetch("/api/image-search/logs");
+          const logsRes = await fetch(apiUrl("/api/image-search/logs"));
           const logsData = await logsRes.json();
           insightsResult.imageSearchLogs = logsData.logs || [];
         } catch {
@@ -827,10 +831,10 @@ export default function App() {
     }
   };
   const handleExportStats = () => {
-    window.open("/api/insights/export", "_blank");
+    window.open(apiUrl("/api/insights/export"), "_blank");
   };
   const handleExportSummary = () => {
-    window.open("/api/insights/export/summary", "_blank");
+    window.open(apiUrl("/api/insights/export/summary"), "_blank");
   };
 
   const resetForm = () =>
@@ -883,7 +887,7 @@ export default function App() {
     // Update Local State Immediately
     if (isEdit) {
       setShortcuts((prev) =>
-        prev.map((s) => (s.id === formData.id ? optimisticItem : s))
+        prev.map((s) => (s.id === formData.id ? optimisticItem : s)),
       );
     } else {
       setShortcuts((prev) => [optimisticItem, ...prev]);
@@ -909,7 +913,9 @@ export default function App() {
       } else {
         // Server Sync
         const method = isEdit ? "PUT" : "POST";
-        const url = isEdit ? `/api/shortcuts/${formData.id}` : "/api/shortcuts";
+        const url = apiUrl(
+          isEdit ? `/api/shortcuts/${formData.id}` : "/api/shortcuts",
+        );
 
         const res = await fetch(url, {
           method,
@@ -946,18 +952,18 @@ export default function App() {
           if (t && t.isLocal) {
             // Local Sync
             const l = JSON.parse(
-              localStorage.getItem("local_shortcuts") || "[]"
+              localStorage.getItem("local_shortcuts") || "[]",
             );
             localStorage.setItem(
               "local_shortcuts",
-              JSON.stringify(l.filter((s) => s.id !== id))
+              JSON.stringify(l.filter((s) => s.id !== id)),
             );
           }
 
           if (isAdmin) {
             if (!t || !t.isLocal) {
               // Server Sync
-              const res = await fetch(`/api/shortcuts/${id}`, {
+              const res = await fetch(apiUrl(`/api/shortcuts/${id}`), {
                 method: "DELETE",
               });
               if (!res.ok) throw new Error("Delete failed");
@@ -965,7 +971,7 @@ export default function App() {
           } else {
             // Non-admin: mark as deleted locally
             const del = JSON.parse(
-              localStorage.getItem("deleted_shortcuts") || "[]"
+              localStorage.getItem("deleted_shortcuts") || "[]",
             );
             if (!del.includes(id)) {
               del.push(id);
@@ -986,8 +992,8 @@ export default function App() {
     const previousShortcuts = [...shortcuts];
     setShortcuts((prev) =>
       prev.map((s) =>
-        s.id === id ? { ...s, favorite: s.favorite ? 0 : 1 } : s
-      )
+        s.id === id ? { ...s, favorite: s.favorite ? 0 : 1 } : s,
+      ),
     );
 
     try {
@@ -999,15 +1005,17 @@ export default function App() {
           "local_shortcuts",
           JSON.stringify(
             l.map((s) =>
-              s.id === id ? { ...s, favorite: s.favorite ? 0 : 1 } : s
-            )
-          )
+              s.id === id ? { ...s, favorite: s.favorite ? 0 : 1 } : s,
+            ),
+          ),
         );
         return; // Local update done
       }
 
       // 3. Server Sync
-      const res = await fetch(`/api/favorite/${id}`, { method: "POST" });
+      const res = await fetch(apiUrl(`/api/favorite/${id}`), {
+        method: "POST",
+      });
       if (!res.ok) throw new Error("Failed to sync");
 
       // Success: Do nothing, UI is already correct.
@@ -1019,7 +1027,7 @@ export default function App() {
   };
   const handleLinkClick = (id, u) => {
     const t = shortcuts.find((s) => s.id === id);
-    if (!t?.isLocal) fetch(`/api/click/${id}`, { method: "POST" });
+    if (!t?.isLocal) fetch(apiUrl(`/api/click/${id}`), { method: "POST" });
     window.open(u, "_blank");
   };
   const handleEdit = (i, e) => {
@@ -1055,7 +1063,7 @@ export default function App() {
           timestamp: new Date().toISOString(),
           shortcuts: shortcuts.filter((s) => !s.isLocal),
           labels: labelColors,
-        })
+        }),
       );
     const a = document.createElement("a");
     a.href = d;
@@ -1069,7 +1077,7 @@ export default function App() {
     if (f) {
       const r = new FileReader();
       r.onload = async (ev) => {
-        await fetch("/api/import", {
+        await fetch(apiUrl("/api/import"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(JSON.parse(ev.target.result)),
@@ -1136,7 +1144,7 @@ export default function App() {
   const uniqueParents = useMemo(
     () =>
       [...new Set(shortcuts.map((s) => s.parent_label).filter(Boolean))].sort(),
-    [shortcuts]
+    [shortcuts],
   );
   const uniqueChildren = useMemo(
     () =>
@@ -1146,11 +1154,11 @@ export default function App() {
             (s.child_label || "")
               .split(",")
               .map((t) => t.trim())
-              .filter(Boolean)
-          )
+              .filter(Boolean),
+          ),
         ),
       ].sort(),
-    [shortcuts]
+    [shortcuts],
   );
 
   // FIX: Sorting Logic now prioritizes explicit SortBy unless it is 'default'
@@ -1212,7 +1220,7 @@ export default function App() {
       const gap = 16; // gap-4 is 1rem = 16px
       const rows = Math.max(
         1,
-        Math.floor((availableHeight + gap) / (cardHeight + gap))
+        Math.floor((availableHeight + gap) / (cardHeight + gap)),
       );
       const cols = colCount; // from style above
 
@@ -1371,7 +1379,7 @@ export default function App() {
     else dotStart = currentPage - 2;
   }
   const visibleDots = Array.from({ length: Math.min(totalPages, maxDots) }).map(
-    (_, i) => dotStart + i
+    (_, i) => dotStart + i,
   );
 
   const handleTagClick = (tag, type) => {
@@ -1910,8 +1918,8 @@ export default function App() {
                             ? "bg-white border-white scale-125"
                             : "bg-gray-800 border-gray-800 scale-125"
                           : darkMode
-                          ? "bg-white/20 border-white/20 hover:bg-white/40"
-                          : "bg-gray-400/40 border-gray-400/40 hover:bg-gray-400/60"
+                            ? "bg-white/20 border-white/20 hover:bg-white/40"
+                            : "bg-gray-400/40 border-gray-400/40 hover:bg-gray-400/60"
                       }`}
                     />
                   ))}
