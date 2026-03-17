@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p ~/.claude/skills)",
+      "Bash(cp /tmp/skills-kit/*.md ~/.claude/skills/)",
+      "Bash(echo $HOME)",
+      "Bash(mkdir -p \"C:/Users/olive/.claude/commands\")",
+      "Bash(cp /tmp/skills-kit/*.md \"C:/Users/olive/.claude/commands/\")",
+      "Bash(vercel env:*)",
+      "Bash(npm i:*)",
+      "Skill(yolo)",
+      "Skill(yolo:*)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\olive\\.claude\\commands"
+    ]
+  }
+}

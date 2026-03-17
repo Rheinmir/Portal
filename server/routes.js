@@ -1,18 +1,7 @@
 import express from "express";
 import crypto, { randomUUID } from "crypto";
 import sharp from "sharp";
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
-import { db } from "./database.js";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const TEMP_DIR = path.join(__dirname, "..", "data", "temp");
-
-// Ensure temp directory exists
-if (!fs.existsSync(TEMP_DIR)) {
-  fs.mkdirSync(TEMP_DIR, { recursive: true });
-}
+import { supabase } from "./database.js";
 
 const router = express.Router();
 
@@ -21,29 +10,47 @@ const router = express.Router();
 const normalizeTenant = (t) =>
   (t && typeof t === "string" ? t.trim() : "") || "default";
 
-const cleanupOrphanLabels = (t) => {
+const cleanupOrphanLabels = async (t) => {
   const ten = normalizeTenant(t);
-  const used = new Set();
+  
+  try {
+    const { data: shortcuts, error: scError } = await supabase
+      .from('shortcuts')
+      .select('parent_label, child_label')
+      .eq('tenant', ten);
 
-  db.prepare("SELECT parent_label, child_label FROM shortcuts WHERE tenant=?")
-    .all(ten)
-    .forEach((s) => {
+    if (scError) throw scError;
+
+    const used = new Set();
+    shortcuts.forEach((s) => {
       if (s.parent_label) used.add(s.parent_label);
       if (s.child_label) {
         s.child_label.split(",").forEach((x) => used.add(x.trim()));
       }
     });
 
-  const all = db
-    .prepare("SELECT name FROM label_colors WHERE tenant=?")
-    .all(ten);
-  const del = db.prepare("DELETE FROM label_colors WHERE name=? AND tenant=?");
+    const { data: allLabels, error: lcError } = await supabase
+      .from('label_colors')
+      .select('name')
+      .eq('tenant', ten);
 
-  all.forEach((l) => {
-    if (!used.has(l.name) && l.name !== "") {
-      del.run(l.name, ten);
+    if (lcError) throw lcError;
+
+    const toDelete = allLabels
+      .filter(l => !used.has(l.name) && l.name !== "")
+      .map(l => l.name);
+
+    if (toDelete.length > 0) {
+      // Supabase in() delete has a limit, but for label names it should be fine
+      await supabase
+        .from('label_colors')
+        .delete()
+        .eq('tenant', ten)
+        .in('name', toDelete);
     }
-  });
+  } catch (err) {
+    console.error("Error cleaning up orphan labels:", err);
+  }
 };
 
 const normPayload = (body) => {
@@ -93,101 +100,149 @@ const genThumb = async (u) => {
   }
 };
 
+
 // --- Routes ---
 
-router.post("/login", (req, res) => {
+router.post("/login", async (req, res) => {
   try {
     const { username, password } = req.body || {};
-    const r = db
-      .prepare("SELECT * FROM admins WHERE username=?")
-      .get(username?.trim());
+    
+    // Using supabase service role key bypasses RLS so we can select passwords
+    const { data: admin, error } = await supabase
+      .from('admins')
+      .select('*')
+      .eq('username', username?.trim())
+      .single();
+
     if (
-      !r ||
+      error || !admin ||
       crypto
         .createHash("sha256")
         .update(password || "")
-        .digest("hex") !== r.password_hash
+        .digest("hex") !== admin.password_hash
     ) {
       return res.status(401).json({ error: "Auth failed" });
     }
-    res.json({ success: true, role: r.role || "admin" });
+    
+    res.json({ success: true, role: admin.role || "admin" });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-router.get("/data", (req, res) => {
+router.get("/data", async (req, res) => {
   try {
     const t = normalizeTenant(req.query.tenant);
-    const sc = db
-      .prepare(
-        "SELECT * FROM shortcuts WHERE tenant=? ORDER BY favorite DESC, sort_index ASC, created_at DESC"
-      )
-      .all(t);
-    const lc = db
-      .prepare("SELECT name, color_class FROM label_colors WHERE tenant=?")
-      .all(t);
-    const cfg = db.prepare("SELECT key, value FROM app_config").all();
+    
+    const [scResult, lcResult, cfgResult] = await Promise.all([
+      supabase
+        .from('shortcuts')
+        .select('*')
+        .eq('tenant', t)
+        .order('favorite', { ascending: false })
+        .order('sort_index', { ascending: true })
+        .order('created_at', { ascending: false }),
+        
+      supabase
+        .from('label_colors')
+        .select('name, color_class')
+        .eq('tenant', t),
+        
+      supabase
+        .from('app_config')
+        .select('key, value')
+    ]);
+
+    if (scResult.error) throw scResult.error;
+    if (lcResult.error) throw lcResult.error;
+    if (cfgResult.error) throw cfgResult.error;
 
     const lcm = {};
     const ac = {};
-    lc.forEach((l) => (lcm[l.name] = l.color_class));
-    cfg.forEach((c) => (ac[c.key] = c.value));
+    
+    (lcResult.data || []).forEach((l) => (lcm[l.name] = l.color_class));
+    (cfgResult.data || []).forEach((c) => (ac[c.key] = c.value));
 
-    res.json({ shortcuts: sc, labelColors: lcm, appConfig: ac, tenant: t });
+    res.json({ 
+      shortcuts: scResult.data || [], 
+      labelColors: lcm, 
+      appConfig: ac, 
+      tenant: t 
+    });
+    
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-router.post("/config", (req, res) => {
+router.post("/config", async (req, res) => {
   try {
     const c = req.body;
-    const st = db.prepare(
-      "INSERT OR REPLACE INTO app_config(key,value) VALUES(?,?)"
-    );
-    db.transaction(() => {
-      for (const [k, v] of Object.entries(c)) st.run(k, String(v));
-    })();
+    
+    const rows = Object.entries(c).map(([key, value]) => ({
+      key,
+      value: String(value)
+    }));
+
+    if (rows.length > 0) {
+      const { error } = await supabase
+        .from('app_config')
+        .upsert(rows);
+        
+      if (error) throw error;
+    }
+    
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-router.post("/config/force", (req, res) => {
+router.post("/config/force", async (req, res) => {
   try {
     const cfg = req.body || {};
     const version = Date.now().toString();
-    const st = db.prepare(
-      "INSERT OR REPLACE INTO app_config(key,value) VALUES(?,?)"
-    );
-    db.transaction(() => {
-      for (const [k, v] of Object.entries(cfg)) {
-        st.run(k, String(v));
-      }
-      st.run("config_version", version);
-    })();
+    
+    const rows = Object.entries(cfg).map(([key, value]) => ({
+      key,
+      value: String(value)
+    }));
+    
+    rows.push({ key: 'config_version', value: version });
+
+    if (rows.length > 0) {
+      const { error } = await supabase
+        .from('app_config')
+        .upsert(rows);
+        
+      if (error) throw error;
+    }
+    
     res.json({ success: true, version });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-router.post("/reorder", (req, res) => {
+router.post("/reorder", async (req, res) => {
   try {
     const { order, tenant } = req.body || {};
     const ten = normalizeTenant(tenant);
     if (!Array.isArray(order))
       return res.status(400).json({ error: "Invalid order" });
-    const stmt = db.prepare(
-      "UPDATE shortcuts SET sort_index=? WHERE id=? AND tenant=?"
-    );
-    db.transaction(() => {
-      order.forEach((id, idx) => {
-        stmt.run(idx + 1, id, ten);
-      });
-    })();
+      
+    // Supabase does not support bulk updates exactly like this easily without RPC
+    // We will do parallel updates 
+    const promises = order.map((id, idx) => {
+      return supabase
+        .from('shortcuts')
+        .update({ sort_index: idx + 1 })
+        .eq('id', id)
+        .eq('tenant', ten);
+    });
+    
+    await Promise.all(promises);
+
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -198,34 +253,42 @@ router.post("/shortcuts", async (req, res) => {
   try {
     const d = normPayload(req.body);
     const th = await genThumb(d.icon_url);
-    db.prepare(
-      `
-      INSERT INTO shortcuts(tenant, name, url, icon_url, icon_64, icon_128, icon_256, parent_label, child_label, favorite, clicks)
-      VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
-      ON CONFLICT(name, url, tenant)
-      DO UPDATE SET icon_url=excluded.icon_url, icon_64=excluded.icon_64, icon_128=excluded.icon_128, icon_256=excluded.icon_256, parent_label=excluded.parent_label, child_label=excluded.child_label
-    `
-    ).run(
-      d.tenant,
-      d.name,
-      d.url,
-      d.icon_url,
-      th.icon_64,
-      th.icon_128,
-      th.icon_256,
-      d.parent_label,
-      d.child_label
-    );
+    
+    const { error: scError } = await supabase
+      .from('shortcuts')
+      .upsert({
+        tenant: d.tenant,
+        name: d.name,
+        url: d.url,
+        icon_url: d.icon_url,
+        icon_64: th.icon_64,
+        icon_128: th.icon_128,
+        icon_256: th.icon_256,
+        parent_label: d.parent_label,
+        child_label: d.child_label,
+        favorite: 0,
+        clicks: 0
+      }, { onConflict: 'name, url, tenant' });
+      
+    if (scError) throw scError;
 
-    const ups = db.prepare(
-      "INSERT OR REPLACE INTO label_colors(name, tenant, color_class) VALUES(?, ?, ?)"
-    );
-    if (d.parent_label && d.parent_color)
-      ups.run(d.parent_label, d.tenant, d.parent_color);
-    if (d.child_label && d.child_color)
-      d.child_label
-        .split(",")
-        .forEach((t) => ups.run(t.trim(), d.tenant, d.child_color));
+    const labelRows = [];
+    if (d.parent_label && d.parent_color) {
+      labelRows.push({ name: d.parent_label, tenant: d.tenant, color_class: d.parent_color });
+    }
+    if (d.child_label && d.child_color) {
+      d.child_label.split(",").forEach((t) => {
+        labelRows.push({ name: t.trim(), tenant: d.tenant, color_class: d.child_color });
+      });
+    }
+
+    if (labelRows.length > 0) {
+      const { error: lcError } = await supabase
+        .from('label_colors')
+        .upsert(labelRows, { onConflict: 'name, tenant' });
+        
+      if (lcError) throw lcError;
+    }
 
     res.json({ success: true });
   } catch (e) {
@@ -238,123 +301,227 @@ router.put("/shortcuts/:id", async (req, res) => {
     const d = normPayload(req.body);
     const id = +req.params.id;
     const th = await genThumb(d.icon_url);
-    if (
-      !db
-        .prepare(
-          `UPDATE shortcuts SET name=?, url=?, icon_url=?, icon_64=?, icon_128=?, icon_256=?, parent_label=?, child_label=? WHERE id=? AND tenant=?`
-        )
-        .run(
-          d.name,
-          d.url,
-          d.icon_url,
-          th.icon_64,
-          th.icon_128,
-          th.icon_256,
-          d.parent_label,
-          d.child_label,
-          id,
-          d.tenant
-        ).changes
-    ) {
+    
+    const { data: updated, error: scError } = await supabase
+      .from('shortcuts')
+      .update({
+        name: d.name,
+        url: d.url,
+        icon_url: d.icon_url,
+        icon_64: th.icon_64,
+        icon_128: th.icon_128,
+        icon_256: th.icon_256,
+        parent_label: d.parent_label,
+        child_label: d.child_label
+      })
+      .eq('id', id)
+      .eq('tenant', d.tenant)
+      .select();
+      
+    if (scError) throw scError;
+    
+    if (!updated || updated.length === 0) {
       return res.status(404).json({ error: "Not found" });
     }
-    const ups = db.prepare(
-      "INSERT OR REPLACE INTO label_colors(name, tenant, color_class) VALUES(?, ?, ?)"
-    );
-    if (d.parent_label && d.parent_color)
-      ups.run(d.parent_label, d.tenant, d.parent_color);
-    if (d.child_label && d.child_color)
-      d.child_label
-        .split(",")
-        .forEach((t) => ups.run(t.trim(), d.tenant, d.child_color));
-    cleanupOrphanLabels(d.tenant);
+
+    const labelRows = [];
+    if (d.parent_label && d.parent_color) {
+      labelRows.push({ name: d.parent_label, tenant: d.tenant, color_class: d.parent_color });
+    }
+    if (d.child_label && d.child_color) {
+      d.child_label.split(",").forEach((t) => {
+        labelRows.push({ name: t.trim(), tenant: d.tenant, color_class: d.child_color });
+      });
+    }
+
+    if (labelRows.length > 0) {
+      const { error: lcError } = await supabase
+        .from('label_colors')
+        .upsert(labelRows, { onConflict: 'name, tenant' });
+        
+      if (lcError) throw lcError;
+    }
+    
+    await cleanupOrphanLabels(d.tenant);
     res.json({ success: true });
+    
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
 });
 
-router.delete("/shortcuts/:id", (req, res) => {
+router.delete("/shortcuts/:id", async (req, res) => {
   try {
     const id = +req.params.id;
-    const r = db.prepare("SELECT tenant FROM shortcuts WHERE id=?").get(id);
-    if (!r || !db.prepare("DELETE FROM shortcuts WHERE id=?").run(id).changes) {
+    
+    const { data: shortcut, error: fetchErr } = await supabase
+      .from('shortcuts')
+      .select('tenant')
+      .eq('id', id)
+      .single();
+      
+    if (fetchErr || !shortcut) {
       return res.status(404).json({ error: "Not found" });
     }
-    cleanupOrphanLabels(r.tenant);
+    
+    const { error: delErr } = await supabase
+      .from('shortcuts')
+      .delete()
+      .eq('id', id);
+      
+    if (delErr) throw delErr;
+
+    await cleanupOrphanLabels(shortcut.tenant);
     res.json({ success: true });
+    
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-router.post("/click/:id", (req, res) => {
+router.post("/click/:id", async (req, res) => {
   try {
     const id = +req.params.id;
-    db.prepare("UPDATE shortcuts SET clicks=clicks+1 WHERE id=?").run(id);
-    db.prepare("INSERT INTO click_logs(shortcut_id) VALUES(?)").run(id);
+    
+    // We fetch current then update. Real world might use RPC for increment
+    const { data: shortcut, error: fetchErr } = await supabase
+      .from('shortcuts')
+      .select('clicks')
+      .eq('id', id)
+      .single();
+      
+    if (!fetchErr && shortcut) {
+      await supabase
+        .from('shortcuts')
+        .update({ clicks: shortcut.clicks + 1 })
+        .eq('id', id);
+    }
+    
+    await supabase.from('click_logs').insert([{ shortcut_id: id }]);
+
     res.json({ success: true });
-  } catch {
+  } catch (e) {
     res.status(500).json({ error: "Error" });
   }
 });
 
-router.post("/favorite/:id", (req, res) => {
+router.post("/favorite/:id", async (req, res) => {
   try {
     const id = +req.params.id;
-    const r = db.prepare("SELECT favorite FROM shortcuts WHERE id=?").get(id);
-    if (!r) return res.status(404).json({ error: "Not found" });
-    const nv = r.favorite ? 0 : 1;
-    db.prepare("UPDATE shortcuts SET favorite=? WHERE id=?").run(nv, id);
+    
+    const { data: shortcut, error: fetchErr } = await supabase
+      .from('shortcuts')
+      .select('favorite')
+      .eq('id', id)
+      .single();
+      
+    if (fetchErr || !shortcut) return res.status(404).json({ error: "Not found" });
+    
+    const nv = shortcut.favorite ? 0 : 1;
+    
+    await supabase
+      .from('shortcuts')
+      .update({ favorite: nv })
+      .eq('id', id);
+      
     res.json({ success: true, favorite: nv });
-  } catch {
+  } catch (e) {
     res.status(500).json({ error: "Error" });
   }
 });
 
-router.get("/insights", (req, res) => {
+
+// Insights query helpers relying on REST are harder than raw SQL.
+// If using Supabase, calling raw SQL requires RPC.
+// Or we fetch all data and process in memory, which is slow for huge datasets.
+// For simplicity here, we do some basic fetching and memory processing since it's a small app.
+
+router.get("/insights", async (req, res) => {
   try {
-    const tc = db
-      .prepare("SELECT COUNT(*) as count FROM click_logs")
-      .get().count;
-    const top = db
-      .prepare(
-        "SELECT s.name, COUNT(cl.id) as count FROM click_logs cl JOIN shortcuts s ON cl.shortcut_id=s.id GROUP BY s.name ORDER BY count DESC LIMIT 10"
-      )
-      .all();
-    const tl = db
-      .prepare(
-        "SELECT date(clicked_at) as d, COUNT(*) as count FROM click_logs WHERE clicked_at >= date('now', '-7 day') GROUP BY d ORDER BY d ASC"
-      )
-      .all();
-    const hr = db
-      .prepare(
-        "SELECT strftime('%H', clicked_at) as h, COUNT(*) as count FROM click_logs GROUP BY h ORDER BY h ASC"
-      )
-      .all();
-    res.json({ totalClicks: tc, topApps: top, timeline: tl, hourly: hr });
+    // Total clicks
+    const { count, error: countErr } = await supabase
+      .from('click_logs')
+      .select('*', { count: 'exact', head: true });
+      
+    // Top 10 apps
+    // This usually requires a JOIN and GROUP BY in SQL.
+    // In postgrest, we can do resource embedding:
+    const { data: clicksData, error: clickErr } = await supabase
+      .from('click_logs')
+      .select(`
+        shortcut_id,
+        clicked_at,
+        shortcuts(name)
+      `);
+      
+    if (clickErr) throw clickErr;
+
+    // Process top 10 apps memory-side
+    const appCounts = {};
+    clicksData.forEach(c => {
+      const n = c.shortcuts?.name || 'Deleted';
+      appCounts[n] = (appCounts[n] || 0) + 1;
+    });
+    
+    const topApps = Object.entries(appCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([name, count]) => ({ name, count }));
+
+    // Timeline (last 7 days)
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    
+    const recentClicks = clicksData.filter(c => new Date(c.clicked_at) >= sevenDaysAgo);
+    
+    const timelineCounts = {};
+    recentClicks.forEach(c => {
+      const d = c.clicked_at.split('T')[0];
+      timelineCounts[d] = (timelineCounts[d] || 0) + 1;
+    });
+    
+    const timeline = Object.entries(timelineCounts)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([d, count]) => ({ d, count }));
+
+    // Hourly
+    const hourlyCounts = {};
+    clicksData.forEach(c => {
+      // Supabase returns ISO format 2024-03-01T15:00:00.000000Z
+      const h = new Date(c.clicked_at).getUTCHours().toString().padStart(2, '0');
+      hourlyCounts[h] = (hourlyCounts[h] || 0) + 1;
+    });
+    
+    const hourly = Object.entries(hourlyCounts)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([h, count]) => ({ h, count }));
+
+    res.json({ totalClicks: count || 0, topApps, timeline, hourly });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-router.get("/insights/export", (req, res) => {
+
+router.get("/insights/export", async (req, res) => {
   try {
-    const l = db
-      .prepare(
-        `SELECT cl.clicked_at, s.name, s.tenant, s.parent_label, s.child_label, s.clicks FROM click_logs cl LEFT JOIN shortcuts s ON cl.shortcut_id=s.id ORDER BY cl.clicked_at DESC`
-      )
-      .all();
+    const { data: l, error } = await supabase
+      .from('click_logs')
+      .select('clicked_at, shortcuts(name, tenant, parent_label, child_label, clicks)')
+      .order('clicked_at', { ascending: false });
+
+    if (error) throw error;
+
     const csv = [
       "Time,App,Tenant,Group,Tags,Total_Clicks",
       ...l.map(
         (r) =>
-          `${r.clicked_at},"${(r.name || "Deleted").replace(/"/g, '""')}",${
-            r.tenant
-          },${r.parent_label || ""},"${(r.child_label || "").replace(
+          `${r.clicked_at},"${(r.shortcuts?.name || "Deleted").replace(/"/g, '""')}",${
+            r.shortcuts?.tenant || 'default'
+          },${r.shortcuts?.parent_label || ""},"${(r.shortcuts?.child_label || "").replace(
             /"/g,
             '""'
-          )}",${r.clicks || 0}`
+          )}",${r.shortcuts?.clicks || 0}`
       ),
     ].join("\n");
     res.header("Content-Type", "text/csv");
@@ -367,21 +534,35 @@ router.get("/insights/export", (req, res) => {
   }
 });
 
-router.get("/insights/export/summary", (req, res) => {
+
+router.get("/insights/export/summary", async (req, res) => {
   try {
-    const l = db
-      .prepare(
-        `SELECT date(cl.clicked_at) AS date, s.name AS app, s.tenant, s.parent_label AS grp, s.child_label AS tags, COUNT(*) AS clicks FROM click_logs cl LEFT JOIN shortcuts s ON cl.shortcut_id=s.id GROUP BY date, app, tenant, grp, tags ORDER BY date DESC, clicks DESC`
-      )
-      .all();
+    const { data: l, error } = await supabase
+      .from('click_logs')
+      .select('clicked_at, shortcuts(name, tenant, parent_label, child_label)')
+      
+    if (error) throw error;
+      
+    const groups = {};
+    l.forEach(c => {
+        const d = c.clicked_at.split('T')[0];
+        const app = c.shortcuts?.name || 'Deleted';
+        const tenant = c.shortcuts?.tenant || 'default';
+        const grp = c.shortcuts?.parent_label || '';
+        const tags = c.shortcuts?.child_label || '';
+        
+        const key = `${d}|${app}|${tenant}|${grp}|${tags}`;
+        groups[key] = (groups[key] || 0) + 1;
+    });
+
+    const rows = Object.entries(groups).map(([k, count]) => {
+        const [date, app, tenant, grp, tags] = k.split('|');
+        return `${date},"${app.replace(/"/g, '""')}",${tenant},${grp},"${tags.replace(/"/g, '""')}",${count}`;
+    }).sort((a,b) => b.localeCompare(a)); // sort descending string
+    
     const csv = [
       "Date,App,Tenant,Group,Tags,Clicks",
-      ...l.map(
-        (r) =>
-          `${r.date},"${(r.app || "Deleted").replace(/"/g, '""')}",${
-            r.tenant || ""
-          },${r.grp || ""},"${(r.tags || "").replace(/"/g, '""')}",${r.clicks}`
-      ),
+      ...rows
     ].join("\n");
     res.header("Content-Type", "text/csv");
     res.attachment(
@@ -393,67 +574,75 @@ router.get("/insights/export/summary", (req, res) => {
   }
 });
 
+
 // Import Logic
-router.post("/import", (req, res) => {
+router.post("/import", async (req, res) => {
   const { shortcuts: sc, labels: lb, tenant: t } = req.body || {};
   const root = normalizeTenant(t);
 
-  const ins = db.prepare(`
-    INSERT INTO shortcuts(tenant, name, url, icon_url, icon_64, icon_128, icon_256, parent_label, child_label, favorite, clicks)
-    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(name, url, tenant)
-    DO UPDATE SET icon_url=excluded.icon_url, icon_64=excluded.icon_64, icon_128=excluded.icon_128, icon_256=excluded.icon_256, parent_label=excluded.parent_label, child_label=excluded.child_label, favorite=MAX(shortcuts.favorite, excluded.favorite), clicks=shortcuts.clicks+excluded.clicks
-  `);
-
-  const ups = db.prepare(
-    "INSERT OR REPLACE INTO label_colors(name, tenant, color_class) VALUES(?, ?, ?)"
-  );
-
   try {
-    db.transaction(() => {
-      const aff = new Set();
-      (Array.isArray(sc) ? sc : []).forEach((s) => {
-        if (!s?.name || !s?.url) return;
-        let ten = normalizeTenant(s.tenant || root);
-        try {
-          if (!new URL(s.url).protocol.startsWith("http")) return;
-        } catch {
-          return;
-        }
+    const aff = new Set();
+    const scRows = [];
+    
+    (Array.isArray(sc) ? sc : []).forEach((s) => {
+      if (!s?.name || !s?.url) return;
+      let ten = normalizeTenant(s.tenant || root);
+      try {
+        if (!new URL(s.url).protocol.startsWith("http")) return;
+      } catch {
+        return;
+      }
 
-        ins.run(
-          ten,
-          s.name.trim(),
-          s.url.trim(),
-          s.icon_url || "",
-          s.icon_64 || null,
-          s.icon_128 || null,
-          s.icon_256 || null,
-          s.parent_label || "",
-          s.child_label || "",
-          s.favorite ? 1 : 0,
-          Math.max(0, +s.clicks || 0)
-        );
-        aff.add(ten);
+      scRows.push({
+        tenant: ten,
+        name: s.name.trim(),
+        url: s.url.trim(),
+        icon_url: s.icon_url || "",
+        icon_64: s.icon_64 || null,
+        icon_128: s.icon_128 || null,
+        icon_256: s.icon_256 || null,
+        parent_label: s.parent_label || "",
+        child_label: s.child_label || "",
+        favorite: s.favorite ? 1 : 0,
+        clicks: Math.max(0, +s.clicks || 0)
       });
+      aff.add(ten);
+    });
 
-      (Array.isArray(lb) ? lb : []).forEach((l) => {
-        if (!l?.name) return;
-        let ten = normalizeTenant(l.tenant || root);
-        ups.run(l.name.trim(), ten, l.color_class || "");
-        aff.add(ten);
+    if (scRows.length > 0) {
+        const { error } = await supabase.from('shortcuts').upsert(scRows, { onConflict: 'name, url, tenant' });
+        if (error) console.error("Import shortcut error:", error);
+    }
+
+    const lbRows = [];
+    (Array.isArray(lb) ? lb : []).forEach((l) => {
+      if (!l?.name) return;
+      let ten = normalizeTenant(l.tenant || root);
+      lbRows.push({
+        name: l.name.trim(),
+        tenant: ten,
+        color_class: l.color_class || ""
       });
+      aff.add(ten);
+    });
+    
+    if (lbRows.length > 0) {
+        const { error } = await supabase.from('label_colors').upsert(lbRows, { onConflict: 'name, tenant' });
+        if (error) console.error("Import labels error:", error);
+    }
 
-      aff.forEach((t) => cleanupOrphanLabels(t));
-    })();
+    // Cleanup parallel mapping
+    await Promise.all(Array.from(aff).map(ten => cleanupOrphanLabels(ten)));
+
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
+
 // Image Search - Upload temp image for Google Lens search
-router.post("/image-search", (req, res) => {
+router.post("/image-search", async (req, res) => {
   try {
     const { image } = req.body || {};
     if (!image || !image.startsWith("data:image")) {
@@ -469,8 +658,7 @@ router.post("/image-search", (req, res) => {
     const ext = matches[1] === "jpeg" ? "jpg" : matches[1];
     const base64Data = matches[2];
     const filename = `${randomUUID()}.${ext}`;
-    const filepath = path.join(TEMP_DIR, filename);
-
+    
     // Calculate file size
     const fileBuffer = Buffer.from(base64Data, "base64");
     const fileSize = fileBuffer.length;
@@ -484,42 +672,58 @@ router.post("/image-search", (req, res) => {
       "unknown";
     const userAgent = req.headers["user-agent"] || "unknown";
 
+    // Upload to Supabase Storage
+    const { data: uploadData, error: uploadError } = await supabase
+      .storage
+      .from('temp_images')
+      .upload(filename, fileBuffer, {
+        contentType: `image/${matches[1]}`,
+        upsert: true
+      });
+
+    if (uploadError) {
+        console.error("Supabase storage upload error:", uploadError);
+        throw uploadError;
+    }
+
+    // Get public URL
+    const { data: publicUrlData } = supabase
+      .storage
+      .from('temp_images')
+      .getPublicUrl(filename);
+
+    const publicUrl = publicUrlData.publicUrl;
+
     // Log to database
     try {
-      db.prepare(
-        `
-        INSERT INTO image_search_logs (client_ip, user_agent, file_size, file_type, filename)
-        VALUES (?, ?, ?, ?, ?)
-      `
-      ).run(clientIp, userAgent, fileSize, `image/${matches[1]}`, filename);
-      console.log(
-        `[Image Search] Logged: IP=${clientIp}, Size=${fileSize}, Type=image/${matches[1]}`
-      );
+      await supabase.from('image_search_logs').insert([{
+          client_ip: clientIp,
+          user_agent: userAgent,
+          file_size: fileSize,
+          file_type: `image/${matches[1]}`,
+          filename: filename
+      }]);
     } catch (logErr) {
       console.error("[Image Search] Failed to log:", logErr.message);
     }
 
-    // Write file
-    fs.writeFileSync(filepath, fileBuffer);
-
-    // Schedule deletion after 30 seconds
-    setTimeout(() => {
-      try {
-        if (fs.existsSync(filepath)) {
-          fs.unlinkSync(filepath);
-          console.log(`[Image Search] Cleaned up temp file: ${filename}`);
+    // Since this is serverless, we don't use setTimeout to delete the file
+    // Ideally, a cron job or Supabase trigger cleans up the bucket, but we can't reliably setTimeout in Vercel.
+    // However, since it is a small app we could fire an async delete that awaits a delay
+    // Note: On vercel, the execution context dies soon after response is sent, so this is best-effort.
+    setTimeout(async () => {
+        try {
+            await supabase.storage.from('temp_images').remove([filename]);
+            console.log(`Cleaned up temp image: ${filename} from storage`);
+        } catch(e) {
+            console.error("Cleanup error", e);
         }
-      } catch (e) {
-        console.error(
-          `[Image Search] Failed to delete temp file: ${e.message}`
-        );
-      }
-    }, 30000);
+    }, 5000);
 
     // Return the public URL path
     res.json({
       success: true,
-      url: `/temp/${filename}`,
+      url: publicUrl,
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -527,28 +731,29 @@ router.post("/image-search", (req, res) => {
 });
 
 // Get image search logs (admin only)
-router.get("/image-search/logs", (req, res) => {
+router.get("/image-search/logs", async (req, res) => {
   try {
-    const logs = db
-      .prepare(
-        `
-      SELECT id, client_ip, user_agent, file_size, file_type, filename, searched_at
-      FROM image_search_logs
-      ORDER BY searched_at DESC
-      LIMIT 100
-    `
-      )
-      .all();
-    res.json({ logs });
+    const { data: logs, error } = await supabase
+      .from('image_search_logs')
+      .select('id, client_ip, user_agent, file_size, file_type, filename, searched_at')
+      .order('searched_at', { ascending: false })
+      .limit(100);
+      
+    if (error) throw error;
+      
+    res.json({ logs: logs || [] });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-router.get("/health", (req, res) => {
+
+router.get("/health", async (req, res) => {
   try {
     // Check database connectivity
-    const dbCheck = db.prepare("SELECT 1 as ok").get();
+    let dbStatus = "connected";
+    const { error } = await supabase.from('admins').select('username').limit(1);
+    if (error) dbStatus = "error";
 
     // Get system info
     const memUsage = process.memoryUsage();
@@ -557,7 +762,7 @@ router.get("/health", (req, res) => {
       status: "ok",
       timestamp: new Date().toISOString(),
       uptime: Math.floor(process.uptime()),
-      database: dbCheck?.ok === 1 ? "connected" : "error",
+      database: dbStatus,
       memory: {
         heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024) + " MB",
         heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024) + " MB",

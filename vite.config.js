@@ -6,7 +6,6 @@ export default defineConfig({
   server: {
     proxy: {
       "/api": "http://localhost:5464",
-      "/temp": "http://localhost:5464",
     },
   },
   build: {
