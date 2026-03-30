@@ -31,6 +31,7 @@ import {
   ChevronLeft,
 } from "lucide-react";
 import { useLanguage } from "./contexts/LanguageContext";
+import { getCached, setCached, invalidateCache } from "./cache";
 const ShortcutCard = React.lazy(() => import("./components/ShortcutCard"));
 const InsightsModal = React.lazy(() => import("./components/InsightsModal"));
 const FilterPanel = React.lazy(() => import("./components/FilterPanel"));
@@ -303,91 +304,108 @@ export default function App() {
       setBgEmbed(null);
     }
   };
-  const fetchData = async () => {
-    try {
-      const r = await fetch("/api/data?tenant=" + encodeURIComponent(tenant));
-      const d = await r.json();
-      const ss = d.shortcuts || [];
-      const ls = JSON.parse(
-        localStorage.getItem("local_shortcuts") || "[]"
-      ).map((s) => ({
-        ...s,
-        isLocal: true,
-        child_label: (s.child_label || "").includes("Personal")
-          ? s.child_label
-          : s.child_label
-          ? s.child_label + ", Personal"
-          : "Personal",
-      }));
-      const deletedIds = JSON.parse(
-        localStorage.getItem("deleted_shortcuts") || "[]"
-      );
-      const lsIds = new Set(ls.map((s) => s.id));
-      const filteredServer = ss.filter(
-        (s) => !deletedIds.includes(s.id) && !lsIds.has(s.id)
-      );
-      setShortcuts([...filteredServer, ...ls]);
-      setLabelColors(d.labelColors || {});
-      const c = d.appConfig || {};
-      const serverVer = Number(c.config_version || 0);
-      const localVer = Number(localStorage.getItem("config_version") || 0);
+  const applyApiData = (d) => {
+    const ss = d.shortcuts || [];
+    const ls = JSON.parse(
+      localStorage.getItem("local_shortcuts") || "[]"
+    ).map((s) => ({
+      ...s,
+      isLocal: true,
+      child_label: (s.child_label || "").includes("Personal")
+        ? s.child_label
+        : s.child_label
+        ? s.child_label + ", Personal"
+        : "Personal",
+    }));
+    const deletedIds = JSON.parse(
+      localStorage.getItem("deleted_shortcuts") || "[]"
+    );
+    const lsIds = new Set(ls.map((s) => s.id));
+    const filteredServer = ss.filter(
+      (s) => !deletedIds.includes(s.id) && !lsIds.has(s.id)
+    );
+    setShortcuts([...filteredServer, ...ls]);
+    setLabelColors(d.labelColors || {});
+    const c = d.appConfig || {};
+    const serverVer = Number(c.config_version || 0);
+    const localVer = Number(localStorage.getItem("config_version") || 0);
 
-      const srvUtc = c.utc_offset != null ? Number(c.utc_offset) : 7;
-      setUtcOffset(srvUtc);
+    const srvUtc = c.utc_offset != null ? Number(c.utc_offset) : 7;
+    setUtcOffset(srvUtc);
 
-      if (serverVer > localVer) {
-        localStorage.removeItem("custom_bg");
-        localStorage.removeItem("custom_text_light");
-        localStorage.removeItem("custom_text_dark");
-        localStorage.removeItem("overlayOpacity");
-        localStorage.removeItem("darkMode");
-        localStorage.setItem("config_version", serverVer);
-        applyBackgroundSource(c.default_background || null, true);
-        setLightTextColor(c.text_color_light || DEFAULT_LIGHT_TEXT);
-        setDarkTextColor(c.text_color_dark || DEFAULT_DARK_TEXT);
-        const srvOpacity =
-          c.overlay_opacity != null ? Number(c.overlay_opacity) : 0.5;
-        setOverlayOpacity(isNaN(srvOpacity) ? 0.5 : srvOpacity);
+    if (serverVer > localVer) {
+      localStorage.removeItem("custom_bg");
+      localStorage.removeItem("custom_text_light");
+      localStorage.removeItem("custom_text_dark");
+      localStorage.removeItem("overlayOpacity");
+      localStorage.removeItem("darkMode");
+      localStorage.setItem("config_version", serverVer);
+      applyBackgroundSource(c.default_background || null, true);
+      setLightTextColor(c.text_color_light || DEFAULT_LIGHT_TEXT);
+      setDarkTextColor(c.text_color_dark || DEFAULT_DARK_TEXT);
+      const srvOpacity =
+        c.overlay_opacity != null ? Number(c.overlay_opacity) : 0.5;
+      setOverlayOpacity(isNaN(srvOpacity) ? 0.5 : srvOpacity);
+      const srvDark =
+        c.dark_mode_default === "1" || c.dark_mode_default === "true";
+      setDarkMode(srvDark);
+    } else {
+      setServerBg(c.default_background || null);
+      const localBg = localStorage.getItem("custom_bg");
+      const activeBg = localBg || c.default_background || null;
+      applyBackgroundSource(activeBg, false);
+      setLightTextColor(
+        localStorage.getItem("custom_text_light") ||
+          c.text_color_light ||
+          DEFAULT_LIGHT_TEXT
+      );
+      setDarkTextColor(
+        localStorage.getItem("custom_text_dark") ||
+          c.text_color_dark ||
+          DEFAULT_DARK_TEXT
+      );
+      const localOpStr = localStorage.getItem("overlayOpacity");
+      if (localOpStr != null) {
+        const op = Number(localOpStr);
+        setOverlayOpacity(isNaN(op) ? 0.5 : op);
+      } else if (c.overlay_opacity != null) {
+        const op = Number(c.overlay_opacity);
+        setOverlayOpacity(isNaN(op) ? 0.5 : op);
+      } else {
+        setOverlayOpacity(0.5);
+      }
+      const localDarkStr = localStorage.getItem("darkMode");
+      if (localDarkStr != null) setDarkMode(localDarkStr === "true");
+      else {
         const srvDark =
           c.dark_mode_default === "1" || c.dark_mode_default === "true";
         setDarkMode(srvDark);
-      } else {
-        setServerBg(c.default_background || null);
-        const localBg = localStorage.getItem("custom_bg");
-        const activeBg = localBg || c.default_background || null;
-        applyBackgroundSource(activeBg, false);
-        setLightTextColor(
-          localStorage.getItem("custom_text_light") ||
-            c.text_color_light ||
-            DEFAULT_LIGHT_TEXT
-        );
-        setDarkTextColor(
-          localStorage.getItem("custom_text_dark") ||
-            c.text_color_dark ||
-            DEFAULT_DARK_TEXT
-        );
-        const localOpStr = localStorage.getItem("overlayOpacity");
-        if (localOpStr != null) {
-          const op = Number(localOpStr);
-          setOverlayOpacity(isNaN(op) ? 0.5 : op);
-        } else if (c.overlay_opacity != null) {
-          const op = Number(c.overlay_opacity);
-          setOverlayOpacity(isNaN(op) ? 0.5 : op);
-        } else {
-          setOverlayOpacity(0.5);
-        }
-        const localDarkStr = localStorage.getItem("darkMode");
-        if (localDarkStr != null) setDarkMode(localDarkStr === "true");
-        else {
-          const srvDark =
-            c.dark_mode_default === "1" || c.dark_mode_default === "true";
-          setDarkMode(srvDark);
-        }
       }
-    } catch (e) {
-      console.error(e);
-    } finally {
+    }
+  };
+
+  const fetchData = async () => {
+    const cached = getCached(tenant);
+    if (cached) {
+      // Serve cached data immediately — no loading spinner
+      applyApiData(cached);
       setLoading(false);
+      // Revalidate in background silently
+      fetch("/api/data?tenant=" + encodeURIComponent(tenant))
+        .then((r) => r.json())
+        .then((d) => { setCached(tenant, d); applyApiData(d); })
+        .catch(console.error);
+    } else {
+      try {
+        const r = await fetch("/api/data?tenant=" + encodeURIComponent(tenant));
+        const d = await r.json();
+        setCached(tenant, d);
+        applyApiData(d);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
     }
   };
   useEffect(() => {
@@ -961,6 +979,7 @@ export default function App() {
                 method: "DELETE",
               });
               if (!res.ok) throw new Error("Delete failed");
+              invalidateCache(tenant);
             }
           } else {
             // Non-admin: mark as deleted locally
@@ -1010,7 +1029,8 @@ export default function App() {
       const res = await fetch(`/api/favorite/${id}`, { method: "POST" });
       if (!res.ok) throw new Error("Failed to sync");
 
-      // Success: Do nothing, UI is already correct.
+      // Update cache so next load reflects the favorite change
+      invalidateCache(tenant);
     } catch (err) {
       // 4. Rollback on Error
       setShortcuts(previousShortcuts);
