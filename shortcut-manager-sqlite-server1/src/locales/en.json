@@ -65,5 +65,6 @@
   "invalid_credentials": "Invalid credentials",
   "import_successful": "Import successful!",
   "group_by_tag": "Group by Tag",
-  "uncategorized": "Uncategorized"
+  "uncategorized": "Uncategorized",
+  "expand": "Expand"
 }

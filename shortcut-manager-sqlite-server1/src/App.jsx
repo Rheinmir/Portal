@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { apiUrl } from "./api";
 import {
   Trash2,
   Plus,
@@ -28,29 +29,29 @@ import {
   LogOut,
   Camera,
   Layers,
+  ChevronLeft,
 } from "lucide-react";
 import { useLanguage } from "./contexts/LanguageContext";
 const ShortcutCard = React.lazy(() => import("./components/ShortcutCard"));
 const InsightsModal = React.lazy(() => import("./components/InsightsModal"));
 const FilterPanel = React.lazy(() => import("./components/FilterPanel"));
-const Clock = React.lazy(() => import("./components/Clock"));
 const ConfirmDialog = React.lazy(() => import("./components/ConfirmDialog"));
 
 // Lazy load named exports
 const LoginModal = React.lazy(() =>
   import("./components/AdminModals").then((module) => ({
     default: module.LoginModal,
-  }))
+  })),
 );
 const AddEditModal = React.lazy(() =>
   import("./components/AdminModals").then((module) => ({
     default: module.AddEditModal,
-  }))
+  })),
 );
 const SettingsModal = React.lazy(() =>
   import("./components/AdminModals").then((module) => ({
     default: module.SettingsModal,
-  }))
+  })),
 );
 
 const COLOR_PRESETS = [
@@ -97,7 +98,7 @@ export default function App() {
     [labelColors, setLabelColors] = useState({}),
     [loading, setLoading] = useState(true),
     [darkMode, setDarkMode] = useState(
-      () => localStorage.getItem("darkMode") === "true"
+      () => localStorage.getItem("darkMode") === "true",
     ),
     [bgImage, setBgImage] = useState(null),
     [serverBg, setServerBg] = useState(null),
@@ -109,10 +110,10 @@ export default function App() {
       return isNaN(n) ? 0.5 : n;
     });
   const [lightTextColor, setLightTextColor] = useState(
-      () => localStorage.getItem("custom_text_light") || DEFAULT_LIGHT_TEXT
+      () => localStorage.getItem("custom_text_light") || DEFAULT_LIGHT_TEXT,
     ),
     [darkTextColor, setDarkTextColor] = useState(
-      () => localStorage.getItem("custom_text_dark") || DEFAULT_DARK_TEXT
+      () => localStorage.getItem("custom_text_dark") || DEFAULT_DARK_TEXT,
     );
   const [formData, setFormData] = useState({
       id: null,
@@ -138,13 +139,18 @@ export default function App() {
     [insightsData, setInsightsData] = useState(null),
     [loginCreds, setLoginCreds] = useState({ username: "", password: "" }),
     [loginError, setLoginError] = useState(""),
+    [showConfig, setShowConfig] = useState(false),
+    [showMenu, setShowMenu] = useState(false),
     [sortBy, setSortBy] = useState("default"),
     [tenant, setTenant] = useState(() =>
-      normalizeTenant(localStorage.getItem("tenant"))
+      normalizeTenant(localStorage.getItem("tenant")),
     ),
     [bgUrlInput, setBgUrlInput] = useState(""),
     [isEditingPage, setIsEditingPage] = useState(false),
     [pageInput, setPageInput] = useState("");
+  const [viewMode, setViewMode] = useState(
+    () => localStorage.getItem("viewMode") || "default",
+  );
   const [utcOffset, setUtcOffset] = useState(7);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [confirmState, setConfirmState] = useState({
@@ -167,11 +173,34 @@ export default function App() {
     }),
     [draggingId, setDraggingId] = useState(null);
   const [isGrouped, setIsGrouped] = useState(false);
+
   const fileInputRef = useRef(null),
     bgInputRef = useRef(null),
     importInputRef = useRef(null),
     gridWrapperRef = useRef(null),
-    gridRef = useRef(null);
+    gridRef = useRef(null),
+    searchContainerRef = useRef(null),
+    filterPanelRef = useRef(null);
+
+  const [timeStr, setTimeStr] = useState("");
+
+  useEffect(() => {
+    const updateTime = () => {
+      const d = new Date();
+      const utc = d.getTime() + d.getTimezoneOffset() * 60000;
+      const nd = new Date(utc + 3600000 * utcOffset);
+      setTimeStr(
+        nd.toLocaleTimeString("en-US", {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        }),
+      );
+    };
+    updateTime();
+    const timer = setInterval(updateTime, 1000);
+    return () => clearInterval(timer);
+  }, [utcOffset]);
 
   useEffect(() => {
     const html = document.documentElement;
@@ -189,6 +218,7 @@ export default function App() {
   // Close color picker when clicking outside
   useEffect(() => {
     const handleClickOutside = (e) => {
+      // Color Picker
       if (
         showColorPicker &&
         !e.target.closest(".color-picker-popover") &&
@@ -196,10 +226,21 @@ export default function App() {
       ) {
         setShowColorPicker(false);
       }
+
+      // Filter Panel
+      if (
+        showFilterPanel &&
+        searchContainerRef.current &&
+        !searchContainerRef.current.contains(e.target) &&
+        filterPanelRef.current &&
+        !filterPanelRef.current.contains(e.target)
+      ) {
+        setShowFilterPanel(false);
+      }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [showColorPicker]);
+  }, [showColorPicker, showFilterPanel]);
 
   useEffect(() => {
     const handleWindowDragEnter = (e) => {
@@ -264,81 +305,124 @@ export default function App() {
     }
   };
   const fetchData = async () => {
+    setLoading(true);
+
+    // 1. Always load local data first
     try {
-      const r = await fetch("/api/data?tenant=" + encodeURIComponent(tenant));
-      const d = await r.json();
-      const ss = d.shortcuts || [];
       const ls = JSON.parse(
-        localStorage.getItem("local_shortcuts") || "[]"
+        localStorage.getItem("local_shortcuts") || "[]",
       ).map((s) => ({
         ...s,
         isLocal: true,
         child_label: (s.child_label || "").includes("Personal")
           ? s.child_label
           : s.child_label
-          ? s.child_label + ", Personal"
-          : "Personal",
+            ? s.child_label + ", Personal"
+            : "Personal",
       }));
-      setShortcuts([...ss, ...ls]);
-      setLabelColors(d.labelColors || {});
-      const c = d.appConfig || {};
-      const serverVer = Number(c.config_version || 0);
-      const localVer = Number(localStorage.getItem("config_version") || 0);
 
-      const srvUtc = c.utc_offset != null ? Number(c.utc_offset) : 7;
-      setUtcOffset(srvUtc);
+      // Load local config immediately so UI populates even if server fails
+      const localBg = localStorage.getItem("custom_bg");
+      const localOpStr = localStorage.getItem("overlayOpacity");
+      const localDarkStr = localStorage.getItem("darkMode");
+      const localLightText = localStorage.getItem("custom_text_light");
+      const localDarkText = localStorage.getItem("custom_text_dark");
 
-      if (serverVer > localVer) {
-        localStorage.removeItem("custom_bg");
-        localStorage.removeItem("custom_text_light");
-        localStorage.removeItem("custom_text_dark");
-        localStorage.removeItem("overlayOpacity");
-        localStorage.removeItem("darkMode");
-        localStorage.setItem("config_version", serverVer);
-        applyBackgroundSource(c.default_background || null, true);
-        setLightTextColor(c.text_color_light || DEFAULT_LIGHT_TEXT);
-        setDarkTextColor(c.text_color_dark || DEFAULT_DARK_TEXT);
-        const srvOpacity =
-          c.overlay_opacity != null ? Number(c.overlay_opacity) : 0.5;
-        setOverlayOpacity(isNaN(srvOpacity) ? 0.5 : srvOpacity);
-        const srvDark =
-          c.dark_mode_default === "1" || c.dark_mode_default === "true";
-        setDarkMode(srvDark);
-      } else {
-        setServerBg(c.default_background || null);
-        const localBg = localStorage.getItem("custom_bg");
-        const activeBg = localBg || c.default_background || null;
-        applyBackgroundSource(activeBg, false);
-        setLightTextColor(
-          localStorage.getItem("custom_text_light") ||
-            c.text_color_light ||
-            DEFAULT_LIGHT_TEXT
+      // Defaults or Local overrides
+      // (Server data might override this later if successful)
+      setShortcuts(ls);
+      setOverlayOpacity(localOpStr ? Number(localOpStr) : 0.5);
+      setDarkMode(localDarkStr === "true");
+      setLightTextColor(localLightText || DEFAULT_LIGHT_TEXT);
+      setDarkTextColor(localDarkText || DEFAULT_DARK_TEXT);
+
+      if (localBg) applyBackgroundSource(localBg, false);
+
+      // 2. Try to fetch from server (Soft-Fail)
+      try {
+        const r = await fetch(
+          apiUrl("/api/data?tenant=" + encodeURIComponent(tenant)),
         );
-        setDarkTextColor(
-          localStorage.getItem("custom_text_dark") ||
-            c.text_color_dark ||
-            DEFAULT_DARK_TEXT
+        if (!r.ok) throw new Error("Server not reachable");
+
+        const d = await r.json();
+        const ss = d.shortcuts || [];
+
+        const deletedIds = JSON.parse(
+          localStorage.getItem("deleted_shortcuts") || "[]",
         );
-        const localOpStr = localStorage.getItem("overlayOpacity");
-        if (localOpStr != null) {
-          const op = Number(localOpStr);
-          setOverlayOpacity(isNaN(op) ? 0.5 : op);
-        } else if (c.overlay_opacity != null) {
-          const op = Number(c.overlay_opacity);
-          setOverlayOpacity(isNaN(op) ? 0.5 : op);
-        } else {
-          setOverlayOpacity(0.5);
-        }
-        const localDarkStr = localStorage.getItem("darkMode");
-        if (localDarkStr != null) setDarkMode(localDarkStr === "true");
-        else {
+        const lsIds = new Set(ls.map((s) => s.id));
+        const filteredServer = ss.filter(
+          (s) => !deletedIds.includes(s.id) && !lsIds.has(s.id),
+        );
+
+        // Combine server + local
+        setShortcuts([...filteredServer, ...ls]);
+        setLabelColors(d.labelColors || {});
+
+        const c = d.appConfig || {};
+        const serverVer = Number(c.config_version || 0);
+        const localVer = Number(localStorage.getItem("config_version") || 0);
+
+        const srvUtc = c.utc_offset != null ? Number(c.utc_offset) : 7;
+        setUtcOffset(srvUtc);
+
+        // Sync logic: Server overrides local if version is newer
+        if (serverVer > localVer) {
+          localStorage.removeItem("custom_bg");
+          localStorage.removeItem("custom_text_light");
+          localStorage.removeItem("custom_text_dark");
+          localStorage.removeItem("overlayOpacity");
+          localStorage.removeItem("darkMode");
+          localStorage.setItem("config_version", serverVer);
+
+          applyBackgroundSource(c.default_background || null, true);
+          setLightTextColor(c.text_color_light || DEFAULT_LIGHT_TEXT);
+          setDarkTextColor(c.text_color_dark || DEFAULT_DARK_TEXT);
+
+          const srvOpacity =
+            c.overlay_opacity != null ? Number(c.overlay_opacity) : 0.5;
+          setOverlayOpacity(isNaN(srvOpacity) ? 0.5 : srvOpacity);
+
           const srvDark =
             c.dark_mode_default === "1" || c.dark_mode_default === "true";
           setDarkMode(srvDark);
+        } else {
+          // Keep local or server default if no local override
+          setServerBg(c.default_background || null);
+          const activeBg = localBg || c.default_background || null;
+          applyBackgroundSource(activeBg, false);
+
+          setLightTextColor(
+            localStorage.getItem("custom_text_light") ||
+              c.text_color_light ||
+              DEFAULT_LIGHT_TEXT,
+          );
+          setDarkTextColor(
+            localStorage.getItem("custom_text_dark") ||
+              c.text_color_dark ||
+              DEFAULT_DARK_TEXT,
+          );
+
+          if (localOpStr == null && c.overlay_opacity != null) {
+            const op = Number(c.overlay_opacity);
+            setOverlayOpacity(isNaN(op) ? 0.5 : op);
+          }
+          if (localDarkStr == null) {
+            const srvDark =
+              c.dark_mode_default === "1" || c.dark_mode_default === "true";
+            setDarkMode(srvDark);
+          }
         }
+      } catch (serverErr) {
+        console.warn(
+          "Backend unavailable, running in Light Mode/Offline.",
+          serverErr,
+        );
+        // We already loaded local data, so we just stick with that.
       }
     } catch (e) {
-      console.error(e);
+      console.error("Critical error loading data:", e);
     } finally {
       setLoading(false);
     }
@@ -349,7 +433,7 @@ export default function App() {
 
   const saveConfig = async (k, v) => {
     try {
-      await fetch("/api/config", {
+      await fetch(apiUrl("/api/config"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ [k]: v }),
@@ -508,7 +592,7 @@ export default function App() {
           const currentBg = bgEmbed || bgVideo || bgImage;
           if (currentBg) p.default_background = currentBg;
 
-          const r = await fetch("/api/config/force", {
+          const r = await fetch(apiUrl("/api/config/force"), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(p),
@@ -532,11 +616,11 @@ export default function App() {
               serverList = [...serverList].sort(
                 (a, b) =>
                   b.favorite - a.favorite ||
-                  (sortBy === "alpha" ? a.name.localeCompare(b.name) : 0)
+                  (sortBy === "alpha" ? a.name.localeCompare(b.name) : 0),
               );
             }
             const order = serverList.map((s) => s.id);
-            await fetch("/api/reorder", {
+            await fetch(apiUrl("/api/reorder"), {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ tenant, order }),
@@ -575,6 +659,26 @@ export default function App() {
     }
   };
 
+  // Handle paste event for image search
+  const handleSearchPaste = (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (const item of items) {
+      if (item.type.startsWith("image/")) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (file) {
+          setSearchFile(file);
+          const reader = new FileReader();
+          reader.onload = (ev) => setSearchPreview(ev.target.result);
+          reader.readAsDataURL(file);
+        }
+        break;
+      }
+    }
+  };
+
   const handleGlobalDragOver = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -596,30 +700,137 @@ export default function App() {
   };
 
   const handleSearchSubmit = async () => {
-    if (searchFile) {
-      // Direct upload yields 403 (CORS/Origin check by Google).
-      // Workaround: Copy to clipboard and open Lens.
+    if (searchFile || searchPreview) {
+      // Upload image to server, get public URL, open Google Lens with URL
       try {
-        // Need to create a proper ClipboardItem with the blob
-        const type = searchFile.type;
-        const blob = searchFile; // File is a specific kind of Blob
-        await navigator.clipboard.write([
-          new ClipboardItem({
-            [type]: blob,
-          }),
-        ]);
-        window.open("https://lens.google.com/", "_blank");
-        alert(t("image_copied_hint"));
+        // Show loading toast
+        const loadingToast = document.createElement("div");
+        loadingToast.textContent = "🔍 " + (t("searching") || "Searching...");
+        loadingToast.style.cssText = `
+          position: fixed;
+          bottom: 80px;
+          left: 50%;
+          transform: translateX(-50%);
+          background: rgba(0,0,0,0.85);
+          color: white;
+          padding: 12px 24px;
+          border-radius: 12px;
+          font-size: 14px;
+          z-index: 9999;
+          box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        `;
+        document.body.appendChild(loadingToast);
+
+        // Compression Helper
+        const compressImage = (dataUrl, maxWidth = 800, quality = 0.7) => {
+          return new Promise((resolve) => {
+            const img = new Image();
+            img.src = dataUrl;
+            img.onload = () => {
+              const canvas = document.createElement("canvas");
+              let width = img.width;
+              let height = img.height;
+
+              if (width > maxWidth) {
+                height = Math.round((height * maxWidth) / width);
+                width = maxWidth;
+              }
+
+              canvas.width = width;
+              canvas.height = height;
+              const ctx = canvas.getContext("2d");
+              ctx.drawImage(img, 0, 0, width, height);
+              resolve(canvas.toDataURL("image/jpeg", quality));
+            };
+          });
+        };
+
+        const compressedImage = await compressImage(searchPreview);
+
+        // Upload image to server
+        const response = await fetch(apiUrl("/api/image-search"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image: compressedImage }),
+        });
+
+        const data = await response.json();
+
+        if (!data.success || !data.url) {
+          throw new Error(data.error || "Upload failed");
+        }
+
+        // Build full public URL
+        const publicUrl = window.location.origin + data.url;
+
+        // Open Google Lens with the image URL
+        window.open(
+          `https://lens.google.com/uploadbyurl?url=${encodeURIComponent(
+            publicUrl,
+          )}`,
+          "_blank",
+        );
+
+        // Remove loading toast
+        document.body.removeChild(loadingToast);
+
+        // Clear the search image
+        setSearchFile(null);
+        setSearchPreview(null);
+        if (searchFileInputRef.current) searchFileInputRef.current.value = "";
       } catch (err) {
-        console.error(err);
-        // Fallback for types or context issues
-        alert(t("error_copy_image") + ": " + err.message);
-        window.open("https://lens.google.com/", "_blank");
+        console.error("Image search failed:", err);
+        // Fallback to clipboard approach
+        try {
+          if (searchFile) {
+            await navigator.clipboard.write([
+              new ClipboardItem({
+                [searchFile.type]: searchFile,
+              }),
+            ]);
+          }
+          window.open("https://lens.google.com/", "_blank");
+
+          const hint =
+            t("image_copied_hint") ||
+            "Image copied! Press Ctrl+V → Enter in the new tab.";
+
+          const toast = document.createElement("div");
+          toast.textContent = "📋 " + hint;
+          toast.style.cssText = `
+            position: fixed;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.85);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-size: 14px;
+            z-index: 9999;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+          `;
+          document.body.appendChild(toast);
+          setTimeout(() => {
+            toast.style.opacity = "0";
+            toast.style.transition = "opacity 0.3s";
+            setTimeout(() => document.body.removeChild(toast), 300);
+          }, 4000);
+
+          setSearchFile(null);
+          setSearchPreview(null);
+          if (searchFileInputRef.current) searchFileInputRef.current.value = "";
+        } catch (clipErr) {
+          alert(
+            t("error_copy_image") ||
+              "Could not search image. Please try again.",
+          );
+        }
       }
     } else if (searchTerm.trim()) {
       window.open(
         "https://www.google.com/search?q=" + encodeURIComponent(searchTerm),
-        "_blank"
+        "_blank",
       );
     }
   };
@@ -633,18 +844,31 @@ export default function App() {
 
   const fetchInsights = async () => {
     try {
-      const r = await fetch("/api/insights");
-      setInsightsData(await r.json());
+      const r = await fetch(apiUrl("/api/insights"));
+      const insightsResult = await r.json();
+
+      // Also fetch image search logs for admin
+      if (isAdmin) {
+        try {
+          const logsRes = await fetch(apiUrl("/api/image-search/logs"));
+          const logsData = await logsRes.json();
+          insightsResult.imageSearchLogs = logsData.logs || [];
+        } catch {
+          insightsResult.imageSearchLogs = [];
+        }
+      }
+
+      setInsightsData(insightsResult);
       setShowInsightsModal(true);
     } catch {
       alert(t("error_insights"));
     }
   };
   const handleExportStats = () => {
-    window.open("/api/insights/export", "_blank");
+    window.open(apiUrl("/api/insights/export"), "_blank");
   };
   const handleExportSummary = () => {
-    window.open("/api/insights/export/summary", "_blank");
+    window.open(apiUrl("/api/insights/export/summary"), "_blank");
   };
 
   const resetForm = () =>
@@ -676,12 +900,16 @@ export default function App() {
     const payload = { ...formData, icon_url: iconToSave };
     const isEdit = !!formData.id;
 
+    // 3. Determine Local Status First
+    const isTargetLocal = !isAdmin || formData.isLocal;
+
     // 2. Optimistic Update
     const previousShortcuts = [...shortcuts];
     const tempId = isEdit ? formData.id : Date.now(); // Temp ID for new item
     const optimisticItem = {
       ...payload,
       id: tempId,
+      isLocal: isTargetLocal,
       clicks: isEdit
         ? shortcuts.find((s) => s.id === formData.id)?.clicks || 0
         : 0,
@@ -693,7 +921,7 @@ export default function App() {
     // Update Local State Immediately
     if (isEdit) {
       setShortcuts((prev) =>
-        prev.map((s) => (s.id === formData.id ? optimisticItem : s))
+        prev.map((s) => (s.id === formData.id ? optimisticItem : s)),
       );
     } else {
       setShortcuts((prev) => [optimisticItem, ...prev]);
@@ -704,10 +932,8 @@ export default function App() {
     resetForm();
 
     // 3. Background Sync
-    const isLocal = !isAdmin || formData.isLocal;
-
     try {
-      if (isLocal) {
+      if (isTargetLocal) {
         // Local Storage Sync
         const l = JSON.parse(localStorage.getItem("local_shortcuts") || "[]");
         let nl;
@@ -721,7 +947,9 @@ export default function App() {
       } else {
         // Server Sync
         const method = isEdit ? "PUT" : "POST";
-        const url = isEdit ? `/api/shortcuts/${formData.id}` : "/api/shortcuts";
+        const url = apiUrl(
+          isEdit ? `/api/shortcuts/${formData.id}` : "/api/shortcuts",
+        );
 
         const res = await fetch(url, {
           method,
@@ -758,19 +986,31 @@ export default function App() {
           if (t && t.isLocal) {
             // Local Sync
             const l = JSON.parse(
-              localStorage.getItem("local_shortcuts") || "[]"
+              localStorage.getItem("local_shortcuts") || "[]",
             );
             localStorage.setItem(
               "local_shortcuts",
-              JSON.stringify(l.filter((s) => s.id !== id))
+              JSON.stringify(l.filter((s) => s.id !== id)),
             );
-            // done
-          } else if (isAdmin) {
-            // Server Sync
-            const res = await fetch(`/api/shortcuts/${id}`, {
-              method: "DELETE",
-            });
-            if (!res.ok) throw new Error("Delete failed");
+          }
+
+          if (isAdmin) {
+            if (!t || !t.isLocal) {
+              // Server Sync
+              const res = await fetch(apiUrl(`/api/shortcuts/${id}`), {
+                method: "DELETE",
+              });
+              if (!res.ok) throw new Error("Delete failed");
+            }
+          } else {
+            // Non-admin: mark as deleted locally
+            const del = JSON.parse(
+              localStorage.getItem("deleted_shortcuts") || "[]",
+            );
+            if (!del.includes(id)) {
+              del.push(id);
+              localStorage.setItem("deleted_shortcuts", JSON.stringify(del));
+            }
           }
         } catch (err) {
           // Rollback
@@ -786,8 +1026,8 @@ export default function App() {
     const previousShortcuts = [...shortcuts];
     setShortcuts((prev) =>
       prev.map((s) =>
-        s.id === id ? { ...s, favorite: s.favorite ? 0 : 1 } : s
-      )
+        s.id === id ? { ...s, favorite: s.favorite ? 0 : 1 } : s,
+      ),
     );
 
     try {
@@ -799,15 +1039,17 @@ export default function App() {
           "local_shortcuts",
           JSON.stringify(
             l.map((s) =>
-              s.id === id ? { ...s, favorite: s.favorite ? 0 : 1 } : s
-            )
-          )
+              s.id === id ? { ...s, favorite: s.favorite ? 0 : 1 } : s,
+            ),
+          ),
         );
         return; // Local update done
       }
 
       // 3. Server Sync
-      const res = await fetch(`/api/favorite/${id}`, { method: "POST" });
+      const res = await fetch(apiUrl(`/api/favorite/${id}`), {
+        method: "POST",
+      });
       if (!res.ok) throw new Error("Failed to sync");
 
       // Success: Do nothing, UI is already correct.
@@ -819,7 +1061,7 @@ export default function App() {
   };
   const handleLinkClick = (id, u) => {
     const t = shortcuts.find((s) => s.id === id);
-    if (!t?.isLocal) fetch(`/api/click/${id}`, { method: "POST" });
+    if (!t?.isLocal) fetch(apiUrl(`/api/click/${id}`), { method: "POST" });
     window.open(u, "_blank");
   };
   const handleEdit = (i, e) => {
@@ -855,7 +1097,7 @@ export default function App() {
           timestamp: new Date().toISOString(),
           shortcuts: shortcuts.filter((s) => !s.isLocal),
           labels: labelColors,
-        })
+        }),
       );
     const a = document.createElement("a");
     a.href = d;
@@ -869,7 +1111,7 @@ export default function App() {
     if (f) {
       const r = new FileReader();
       r.onload = async (ev) => {
-        await fetch("/api/import", {
+        await fetch(apiUrl("/api/import"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(JSON.parse(ev.target.result)),
@@ -936,7 +1178,7 @@ export default function App() {
   const uniqueParents = useMemo(
     () =>
       [...new Set(shortcuts.map((s) => s.parent_label).filter(Boolean))].sort(),
-    [shortcuts]
+    [shortcuts],
   );
   const uniqueChildren = useMemo(
     () =>
@@ -946,11 +1188,11 @@ export default function App() {
             (s.child_label || "")
               .split(",")
               .map((t) => t.trim())
-              .filter(Boolean)
-          )
+              .filter(Boolean),
+          ),
         ),
       ].sort(),
-    [shortcuts]
+    [shortcuts],
   );
 
   // FIX: Sorting Logic now prioritizes explicit SortBy unless it is 'default'
@@ -1005,8 +1247,15 @@ export default function App() {
       const cardEl = gridRef.current.querySelector("[data-card]");
       const cardHeight = cardEl ? cardEl.getBoundingClientRect().height : 140;
       const wrapperRect = gridWrapperRef.current.getBoundingClientRect();
-      const availableHeight = window.innerHeight - wrapperRect.top - 80;
-      const rows = Math.max(1, Math.floor(availableHeight / cardHeight));
+      // Reduced buffer for launchpad to fill gap (pagination is compact at bottom)
+      const bottomBuffer = viewMode === "launchpad" ? 60 : 80;
+      const availableHeight =
+        window.innerHeight - wrapperRect.top - bottomBuffer;
+      const gap = 16; // gap-4 is 1rem = 16px
+      const rows = Math.max(
+        1,
+        Math.floor((availableHeight + gap) / (cardHeight + gap)),
+      );
       const cols = colCount; // from style above
 
       setColCount(cols);
@@ -1023,6 +1272,7 @@ export default function App() {
     bgEmbed,
     isGrouped,
     showFilterPanel,
+    viewMode,
   ]);
 
   const partitionedPages = useMemo(() => {
@@ -1163,8 +1413,28 @@ export default function App() {
     else dotStart = currentPage - 2;
   }
   const visibleDots = Array.from({ length: Math.min(totalPages, maxDots) }).map(
-    (_, i) => dotStart + i
+    (_, i) => dotStart + i,
   );
+
+  const handleTagClick = (tag, type) => {
+    // Sync with filter menu by opening it
+    setShowMenu(true);
+
+    if (type === "parent") {
+      if (activeParentFilter === tag) {
+        setActiveParentFilter("all");
+      } else {
+        setActiveParentFilter(tag);
+        // Do NOT reset child filter here to allow combined filtering
+      }
+    } else if (type === "child") {
+      if (activeChildFilter === tag) {
+        setActiveChildFilter("all");
+      } else {
+        setActiveChildFilter(tag);
+      }
+    }
+  };
 
   return (
     <div
@@ -1239,22 +1509,17 @@ export default function App() {
               : "",
         }}
       >
-        <div className="sticky top-0 z-30 w-full flex flex-col pt-4 px-4 gap-2 pointer-events-none">
+        <div className="sticky top-0 z-30 w-full flex flex-col pt-2 px-4 gap-2 pointer-events-none">
           <div className="pointer-events-auto w-full max-w-7xl mx-auto flex items-center justify-between gap-3 relative">
-            {/* CLOCK DESKTOP: Now responsive, on the left */}
-            <div className="hidden sm:block min-w-[120px]">
-              <React.Suspense
-                fallback={
-                  <div className="h-8 w-24 bg-gray-200/20 rounded animate-pulse" />
-                }
-              >
-                <Clock utcOffset={utcOffset} />
-              </React.Suspense>
+            {/* CLOCK DESKTOP: Hidden on mobile/tablet */}
+            <div className="hidden lg:block min-w-[120px]">
+              {/* Clock removed, integrated into search placeholder */}
             </div>
 
-            <div className="flex-1 flex items-center justify-center gap-2 max-w-2xl">
+            <div className="flex-1 flex items-center justify-center gap-2 max-w-2xl mx-auto">
               <div
-                className="relative group/search w-full transition-all flex items-center bg-white dark:bg-gray-800 rounded-full border shadow-sm focus-within:ring-2 focus-within:ring-[#009FB8] overflow-hidden"
+                ref={searchContainerRef}
+                className={`relative group/search transition-all flex items-center bg-white/50 dark:bg-gray-800/50 hover:bg-white/80 dark:hover:bg-gray-800/80 focus-within:!bg-white dark:focus-within:!bg-gray-800 rounded-full border shadow-sm overflow-hidden ${"w-2/3 max-w-lg h-10 shadow-md"}`}
                 style={{ borderColor: darkMode ? "#374151" : "#D8D8D8" }}
               >
                 <button
@@ -1292,11 +1557,13 @@ export default function App() {
                   placeholder={
                     searchPreview
                       ? "Google Image Search..."
-                      : t("search_placeholder")
+                      : `${timeStr}   ${t("search_placeholder")}`
                   }
                   value={searchTerm}
+                  onFocus={() => setShowFilterPanel(true)}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSearchSubmit()}
+                  onPaste={handleSearchPaste}
                 />
 
                 {/* Image Upload Trigger */}
@@ -1321,144 +1588,132 @@ export default function App() {
                   />
                 </div>
               </div>
-              <React.Suspense
-                fallback={
-                  <div className="w-9 h-9 bg-gray-200/50 rounded-full" />
-                }
-              >
-                <button
-                  onClick={() => setShowFilterPanel(!showFilterPanel)}
-                  className={`p-2 rounded-full shadow-sm border ${inputClass} ${
-                    bgImage || bgVideo || bgEmbed ? "bg-opacity-80" : ""
+
+              <div className="flex items-center">
+                <div
+                  className={`flex items-center gap-2 overflow-hidden transition-all duration-300 ease-in-out ${
+                    showMenu
+                      ? "max-w-[500px] opacity-100 mr-2"
+                      : "max-w-0 opacity-0 mr-0"
                   }`}
                 >
-                  <Filter size={18} />
-                </button>
-              </React.Suspense>
-              <div className="flex items-center gap-1 bg-gray-200/50 dark:bg-gray-800/50 rounded-full p-1 backdrop-blur-sm">
+                  <div className="flex items-center gap-1 bg-gray-200/50 dark:bg-gray-800/50 rounded-full p-1 backdrop-blur-sm">
+                    <button
+                      onClick={() => {
+                        const newMode =
+                          viewMode === "default" ? "launchpad" : "default";
+                        setViewMode(newMode);
+                        localStorage.setItem("viewMode", newMode);
+                      }}
+                      className={`p-1.5 rounded-full text-xs transition-all ${
+                        viewMode === "launchpad"
+                          ? "bg-white dark:bg-gray-700 shadow text-[#009FB8]"
+                          : "opacity-50"
+                      }`}
+                      title={
+                        viewMode === "default"
+                          ? "Switch to Launchpad Mode"
+                          : "Switch to Default Mode"
+                      }
+                    >
+                      <LayoutGrid size={14} />
+                    </button>
+                    <div className="w-px h-3 bg-gray-400/50 mx-0.5" />
+                    <button
+                      onClick={() => setIsGrouped(!isGrouped)}
+                      className={`p-1.5 rounded-full text-xs transition-all ${
+                        isGrouped
+                          ? "bg-white dark:bg-gray-700 shadow text-[#009FB8]"
+                          : "opacity-50"
+                      }`}
+                      title={t("group_by_tag") || "Group by Tag"}
+                    >
+                      <Layers size={14} />
+                    </button>
+                    <div className="w-px h-3 bg-gray-400/50 mx-0.5" />
+                    <button
+                      onClick={() => setSortBy("default")}
+                      className={`p-1.5 rounded-full text-xs ${
+                        sortBy === "default"
+                          ? "bg-white dark:bg-gray-700 shadow"
+                          : "opacity-50"
+                      }`}
+                    >
+                      <List size={14} />
+                    </button>
+                    <button
+                      onClick={() => setSortBy("alpha")}
+                      className={`p-1.5 rounded-full text-xs ${
+                        sortBy === "alpha"
+                          ? "bg-white dark:bg-gray-700 shadow"
+                          : "opacity-50"
+                      }`}
+                    >
+                      Aa
+                    </button>
+                  </div>
+                </div>
+
+                {/* Trigger Button */}
                 <button
-                  onClick={() => setIsGrouped(!isGrouped)}
-                  className={`p-1.5 rounded-full text-xs transition-all ${
-                    isGrouped
-                      ? "bg-white dark:bg-gray-700 shadow text-[#009FB8]"
-                      : "opacity-50"
-                  }`}
-                  title={t("group_by_tag") || "Group by Tag"}
+                  onClick={() => setShowMenu(!showMenu)}
+                  className={`p-2 rounded-full shadow-sm border transition-all duration-300 ${
+                    showMenu
+                      ? "bg-white dark:bg-gray-800 text-blue-500 border-blue-500/50"
+                      : "bg-white/50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 hover:bg-white/80 dark:hover:bg-gray-800/80"
+                  } ${bgImage || bgVideo || bgEmbed ? "backdrop-blur-sm" : ""}`}
                 >
-                  <Layers size={14} />
-                </button>
-                <div className="w-px h-3 bg-gray-400/50 mx-0.5" />
-                <button
-                  onClick={() => setSortBy("default")}
-                  className={`p-1.5 rounded-full text-xs ${
-                    sortBy === "default"
-                      ? "bg-white dark:bg-gray-700 shadow"
-                      : "opacity-50"
-                  }`}
-                >
-                  <List size={14} />
-                </button>
-                <button
-                  onClick={() => setSortBy("alpha")}
-                  className={`p-1.5 rounded-full text-xs ${
-                    sortBy === "alpha"
-                      ? "bg-white dark:bg-gray-700 shadow"
-                      : "opacity-50"
-                  }`}
-                >
-                  Aa
+                  <ChevronLeft
+                    size={18}
+                    className={`transition-transform duration-300 ${
+                      showMenu ? "rotate-180" : ""
+                    }`}
+                  />
                 </button>
               </div>
             </div>
 
             {/* Spacer for potential right-side elements or keeping it centered */}
-            <div className="hidden sm:block min-w-[120px]"></div>
+            {/* Spacer for potential right-side elements or keeping it centered */}
+            <div className="hidden lg:block min-w-[120px]"></div>
+
+            {/* Mobile Config Toggle (Portrait only) - Absolute Right */}
+            <button
+              onClick={() => setShowConfig(!showConfig)}
+              className={`absolute right-0 hidden portrait:flex p-2 rounded-full shadow-sm border bg-white/50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 hover:bg-white/80 dark:hover:bg-gray-800/80 backdrop-blur-sm opacity-0 hover:opacity-100 transition-all duration-300 z-50 ${
+                showMenu ? "translate-y-12" : ""
+              }`}
+            >
+              <Settings size={18} />
+            </button>
           </div>
 
+          {/* CLOCK MOBILE/TABLET: Removed */}
+
           {/* PAGINATION & CLOCK MOBILE */}
-          {totalPages > 1 && (
-            <div className="pointer-events-auto w-full max-w-2xl mx-auto flex justify-center mb-1 relative">
-              {/* CLOCK MOBILE: Left of Pagination */}
-              <div className="sm:hidden absolute left-6 top-1/2 -translate-y-1/2">
-                <React.Suspense fallback={null}>
-                  <Clock utcOffset={utcOffset} className="text-sm" />
-                </React.Suspense>
-              </div>
 
-              <div className="flex items-center gap-3 px-3 py-1.5 rounded-full bg-gray-100/80 dark:bg-gray-800/80 border border-gray-300/60 dark:border-gray-700/60 backdrop-blur-sm shadow-sm">
-                {totalPages > 6 &&
-                  (isEditingPage ? (
-                    <input
-                      autoFocus
-                      className="w-12 bg-transparent border-b border-blue-500 text-center text-[11px] outline-none"
-                      value={pageInput}
-                      onChange={(e) => setPageInput(e.target.value)}
-                      onBlur={() => {
-                        setIsEditingPage(false);
-                        setPageInput("");
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          const p = parseInt(pageInput) - 1;
-                          if (!isNaN(p) && p >= 0 && p < totalPages)
-                            setCurrentPage(p);
-                          setIsEditingPage(false);
-                        }
-                      }}
-                    />
-                  ) : (
-                    <span
-                      className="text-[11px] opacity-70 hover:opacity-100 cursor-pointer font-medium min-w-[60px] text-center"
-                      onClick={() => {
-                        setIsEditingPage(true);
-                        setPageInput(String(currentPage + 1));
-                      }}
-                      title={t("enter_page_number")}
-                    >
-                      {t("page")} {currentPage + 1}/{totalPages}
-                    </span>
-                  ))}
-                <div className="flex items-center gap-1.5">
-                  {visibleDots.map((i) => (
-                    <button
-                      key={i}
-                      onClick={() => setCurrentPage(i)}
-                      className={`w-2 h-2 rounded-full transition-all duration-300 border ${
-                        i === currentPage
-                          ? darkMode
-                            ? "bg-white border-white scale-125"
-                            : "bg-gray-800 border-gray-800 scale-125"
-                          : darkMode
-                          ? "bg-white/20 border-white/20 hover:bg-white/40"
-                          : "bg-gray-400/40 border-gray-400/40 hover:bg-gray-400/60"
-                      }`}
-                    />
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          <React.Suspense fallback={null}>
-            <FilterPanel
-              isOpen={showFilterPanel}
-              activeParentFilter={activeParentFilter}
-              setActiveParentFilter={setActiveParentFilter}
-              activeChildFilter={activeChildFilter}
-              setActiveChildFilter={setActiveChildFilter}
-              uniqueParents={uniqueParents}
-              uniqueChildren={uniqueChildren}
-              labelColors={labelColors}
-              modalClass={modalClass}
-              getContrastYIQ={getContrastYIQ}
-            />
-          </React.Suspense>
+          <div ref={filterPanelRef}>
+            <React.Suspense fallback={null}>
+              <FilterPanel
+                isOpen={showFilterPanel}
+                activeParentFilter={activeParentFilter}
+                setActiveParentFilter={setActiveParentFilter}
+                activeChildFilter={activeChildFilter}
+                setActiveChildFilter={setActiveChildFilter}
+                uniqueParents={uniqueParents}
+                uniqueChildren={uniqueChildren}
+                labelColors={labelColors}
+                modalClass={modalClass}
+                getContrastYIQ={getContrastYIQ}
+              />
+            </React.Suspense>
+          </div>
         </div>
 
         {/* GRID */}
         <div
           ref={gridWrapperRef}
-          className="max-w-7xl mx-auto px-6 pb-32 pt-8 min-h-[60vh] outline-none"
+          className="max-w-7xl mx-auto px-8 md:px-20 pb-48 pt-8 min-h-[60vh] outline-none"
           style={{ overflow: "hidden" }}
           onWheel={(e) => {
             e.preventDefault();
@@ -1480,7 +1735,11 @@ export default function App() {
           {!isGrouped ? (
             <div
               ref={gridRef}
-              className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-4 justify-items-center"
+              className={`grid gap-4 justify-items-center ${
+                viewMode === "launchpad"
+                  ? "grid-cols-4 md:grid-cols-5 lg:grid-cols-7"
+                  : "grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8"
+              }`}
             >
               {pagedShortcuts.map((i) => (
                 <React.Suspense
@@ -1506,6 +1765,8 @@ export default function App() {
                     draggingId={draggingId}
                     darkMode={darkMode}
                     getContrastYIQ={getContrastYIQ}
+                    viewMode={viewMode}
+                    handleTagClick={handleTagClick}
                   />
                 </React.Suspense>
               ))}
@@ -1561,7 +1822,7 @@ export default function App() {
                   return (
                     <div
                       key={groupName}
-                      className="relative rounded-3xl p-4 transition-all duration-500 animate-in fade-in slide-in-from-bottom-2"
+                      className="relative rounded-3xl p-4"
                       style={{
                         backgroundColor: bgWithOpacity,
                         border: `1px solid ${baseColor}30`,
@@ -1579,7 +1840,7 @@ export default function App() {
 
                       <div
                         ref={gIdx === 0 ? gridRef : null}
-                        className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-4 justify-items-center mt-2"
+                        className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 gap-2 sm:gap-4 justify-items-center mt-2"
                       >
                         {items.map((i) => (
                           <React.Suspense
@@ -1605,6 +1866,7 @@ export default function App() {
                               draggingId={draggingId}
                               darkMode={darkMode}
                               getContrastYIQ={getContrastYIQ}
+                              handleTagClick={handleTagClick}
                             />
                           </React.Suspense>
                         ))}
@@ -1638,14 +1900,94 @@ export default function App() {
           )}
         </div>
 
-        <div className="fixed bottom-6 right-6 z-50 pointer-events-auto opacity-0 hover:opacity-100 transition-opacity duration-300 max-w-[calc(100vw-3rem)]">
+        {/* PAGINATION - Global Fixed Position */}
+        {totalPages > 1 && (
+          <div className="pointer-events-none fixed bottom-0 left-0 right-0 z-40 flex justify-center pb-4 pt-10 bg-gradient-to-t from-transparent to-transparent">
+            <div className="pointer-events-auto">
+              <div
+                className={`flex items-center gap-3 px-3 py-1.5 rounded-full transition-all ${
+                  viewMode === "launchpad" ? "transform scale-110" : ""
+                }`}
+              >
+                {totalPages > 6 &&
+                  (isEditingPage ? (
+                    <input
+                      autoFocus
+                      className="w-12 bg-transparent border-b border-blue-500 text-center text-[11px] outline-none"
+                      value={pageInput}
+                      onChange={(e) => setPageInput(e.target.value)}
+                      onBlur={() => {
+                        setIsEditingPage(false);
+                        setPageInput("");
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          const p = parseInt(pageInput) - 1;
+                          if (!isNaN(p) && p >= 0 && p < totalPages)
+                            setCurrentPage(p);
+                          setIsEditingPage(false);
+                        }
+                      }}
+                    />
+                  ) : (
+                    <span
+                      className="text-[11px] opacity-70 hover:opacity-100 cursor-pointer font-medium min-w-[60px] text-center"
+                      onClick={() => {
+                        setIsEditingPage(true);
+                        setPageInput(String(currentPage + 1));
+                      }}
+                      title={t("enter_page_number")}
+                    >
+                      {t("page")} {currentPage + 1}/{totalPages}
+                    </span>
+                  ))}
+                <div className="flex items-center gap-1.5">
+                  {visibleDots.map((i) => (
+                    <button
+                      key={i}
+                      onClick={() => setCurrentPage(i)}
+                      className={`w-2 h-2 rounded-full transition-all duration-300 border ${
+                        i === currentPage
+                          ? darkMode
+                            ? "bg-white border-white scale-125"
+                            : "bg-gray-800 border-gray-800 scale-125"
+                          : darkMode
+                            ? "bg-white/20 border-white/20 hover:bg-white/40"
+                            : "bg-gray-400/40 border-gray-400/40 hover:bg-gray-400/60"
+                      }`}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="fixed right-0 top-1/2 -translate-y-1/2 z-50 flex items-center group/panel pointer-events-none">
+          {/* Trigger Handle - Invisible by default, reveals on hover */}
           <div
-            className={`group/menu flex flex-wrap items-center justify-end gap-2 p-2 rounded-3xl border shadow-lg ${inputClass} bg-opacity-90 backdrop-blur-md transition-all`}
+            className="pointer-events-auto w-14 h-48 flex items-center justify-end pr-0 cursor-pointer peer transition-all duration-300 portrait:hidden"
+            onClick={() => setShowConfig(!showConfig)}
+          >
+            <div
+              className={`w-1.5 h-16 bg-gray-400/40 opacity-0 group-hover/panel:opacity-100 hover:!bg-gray-400/60 backdrop-blur-[1px] rounded-l-full transition-all duration-300 ${
+                showConfig ? "bg-gray-400/60 opacity-100" : ""
+              }`}
+            />
+          </div>
+
+          {/* Config Menu - Reveals on hover of trigger or menu itself OR if functionality toggled */}
+          <div
+            className={`pointer-events-auto flex flex-col items-center gap-2 p-2 rounded-l-3xl border shadow-lg ${inputClass} bg-opacity-90 backdrop-blur-md transition-all duration-300 translate-x-full opacity-0 peer-hover:translate-x-0 peer-hover:opacity-100 hover:translate-x-0 hover:opacity-100 mr-0 ${
+              showConfig ? "!translate-x-0 !opacity-100" : ""
+            }`}
           >
             {/* BG Control */}
             {(bgImage || bgVideo || bgEmbed) && (
-              <div className="flex items-center gap-1 bg-black/40 rounded-full px-2 py-1 backdrop-blur-sm">
-                <span className="text-[10px] text-white/90 font-bold">BG</span>
+              <div className="flex flex-col items-center gap-1 bg-black/40 rounded-2xl px-1 py-2 backdrop-blur-sm">
+                <span className="text-[9px] text-white/90 font-bold tracking-wider">
+                  BG
+                </span>
                 <input
                   type="range"
                   min="0"
@@ -1658,7 +2000,11 @@ export default function App() {
                     localStorage.setItem("overlayOpacity", v);
                     if (isAdmin) saveConfig("overlay_opacity", v);
                   }}
-                  className="w-16 h-1 accent-[#009FB8] cursor-pointer"
+                  className="h-16 w-1 accent-[#009FB8] cursor-pointer appearance-none -order-1"
+                  style={{
+                    writingMode: "bt-lr",
+                    WebkitAppearance: "slider-vertical",
+                  }}
                 />
               </div>
             )}
@@ -1675,7 +2021,7 @@ export default function App() {
               )}
             </button>
 
-            <div className="w-px h-4 bg-gray-300 mx-1"></div>
+            <div className="h-px w-4 bg-gray-300 my-1"></div>
 
             {/* Text Color Picker */}
             <div className="relative z-50">
@@ -1692,7 +2038,7 @@ export default function App() {
               </button>
 
               {showColorPicker && (
-                <div className="color-picker-popover absolute bottom-full mb-3 left-1/2 -translate-x-1/2 p-3 rounded-xl bg-white dark:bg-gray-800 shadow-xl border border-gray-200 dark:border-gray-700 min-w-[120px] flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-2">
+                <div className="color-picker-popover absolute right-full mr-3 top-1/2 -translate-y-1/2 p-3 rounded-xl bg-white dark:bg-gray-800 shadow-xl border border-gray-200 dark:border-gray-700 min-w-[120px] flex flex-col gap-2 animate-in fade-in slide-in-from-right-2">
                   <div className="grid grid-cols-[auto_1fr] gap-2 items-center">
                     <input
                       type="color"
@@ -1723,7 +2069,7 @@ export default function App() {
               )}
             </div>
 
-            <div className="w-px h-4 bg-gray-300 mx-1"></div>
+            <div className="h-px w-4 bg-gray-300 my-1"></div>
 
             {/* Media Controls */}
             <button
@@ -1739,29 +2085,39 @@ export default function App() {
               accept="image/*,video/*"
               onChange={handleBgUpload}
             />
-            <div className="hidden sm:flex items-center gap-1 ml-1">
-              <input
-                type="text"
-                placeholder={t("image_gif_link")}
-                className={`px-2 py-1 text-[11px] rounded-full border max-w-[120px] ${inputClass}`}
-                value={bgUrlInput}
-                onChange={(e) => setBgUrlInput(e.target.value)}
-              />
+            {/* Link input hidden in vertical mode or changed to popover? For simplicity, hiding it or using a prompt might be better, OR a popover. Given the tight space, let's make it a popover trigger or just keep it simple. Actually, the original code had an input field. In vertical mode, an input field ruins the width. Let's make it a button that toggles a popover for the input. */}
+
+            <div className="relative group/bg-link">
               <button
-                type="button"
-                onClick={applyBgUrl}
-                className="px-2 py-1 text-[11px] rounded-full border border-gray-400/50 hover:bg-gray-200 dark:hover:bg-gray-700"
+                className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"
+                title={t("image_gif_link")}
               >
-                {t("set")}
+                <Link size={16} />
               </button>
+              <div className="absolute right-full mr-3 top-1/2 -translate-y-1/2 hidden group-hover/bg-link:flex items-center gap-1 p-2 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700">
+                <input
+                  type="text"
+                  placeholder={t("image_gif_link")}
+                  className={`px-2 py-1 text-[11px] rounded-lg border w-32 ${inputClass}`}
+                  value={bgUrlInput}
+                  onChange={(e) => setBgUrlInput(e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={applyBgUrl}
+                  className="px-2 py-1 text-[11px] rounded-lg border border-gray-400/50 hover:bg-gray-200 dark:hover:bg-gray-700"
+                >
+                  {t("set")}
+                </button>
+              </div>
             </div>
 
             {/* Language Switcher */}
-            <div className="relative group/lang ml-1">
+            <div className="relative group/lang">
               <select
                 value={lang}
                 onChange={(e) => setLang(e.target.value)}
-                className={`appearance-none bg-black/5 dark:bg-white/10 text-xs font-bold uppercase rounded-xl px-2 py-1.5 pr-5 cursor-pointer outline-none hover:bg-black/10 dark:hover:bg-white/20 transition-all text-gray-700 dark:text-gray-300 border-none`}
+                className={`appearance-none bg-transparent w-8 text-xs font-bold uppercase text-center cursor-pointer outline-none hover:text-blue-500 transition-all text-gray-700 dark:text-gray-300 border-none p-0`}
               >
                 {["vn", "en", "de", "kz", "ka", "ru"].map((l) => (
                   <option key={l} value={l} className="text-black">
@@ -1769,25 +2125,11 @@ export default function App() {
                   </option>
                 ))}
               </select>
-              <div className="absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none opacity-50">
-                <svg
-                  width="8"
-                  height="8"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="3"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M6 9l6 6 6-6" />
-                </svg>
-              </div>
             </div>
 
             {isAdmin && (
               <>
-                <div className="w-px h-4 bg-gray-300 mx-1"></div>
+                <div className="h-px w-4 bg-gray-300 my-1"></div>
                 <button
                   onClick={fetchInsights}
                   className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-orange-500"
@@ -1820,7 +2162,7 @@ export default function App() {
                   accept=".json"
                   onChange={handleImportData}
                 />
-                <div className="w-px h-4 bg-gray-300 mx-1"></div>
+                <div className="h-px w-4 bg-gray-300 my-1"></div>
                 <button
                   onClick={() => setShowSettingsModal(true)}
                   className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"
@@ -1838,7 +2180,14 @@ export default function App() {
             )}
             {!isAdmin && (
               <>
-                <div className="w-px h-4 bg-gray-300 mx-1"></div>
+                <div className="h-px w-4 bg-gray-300 my-1"></div>
+                <button
+                  onClick={handleResetBg}
+                  className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-orange-500"
+                  title={t("reset_bg")}
+                >
+                  <RotateCcw size={16} />
+                </button>
                 <button
                   onClick={handleClearMedia}
                   className="p-2 hover:bg-red-100 dark:hover:bg-red-900 rounded-full text-red-500"
@@ -1846,14 +2195,6 @@ export default function App() {
                 >
                   <Trash2 size={16} />
                 </button>
-                {localStorage.getItem("custom_bg") && (
-                  <button
-                    onClick={handleResetBg}
-                    className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-orange-500"
-                  >
-                    <RotateCcw size={16} />
-                  </button>
-                )}
                 <button
                   onClick={() => setShowLoginModal(true)}
                   className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"
@@ -1874,6 +2215,7 @@ export default function App() {
             onExportStats={handleExportStats}
             onExportSummary={handleExportSummary}
             modalClass={modalClass}
+            isAdmin={isAdmin}
           />
         </React.Suspense>
 
@@ -1914,6 +2256,7 @@ export default function App() {
             inputClass={inputClass}
             darkMode={darkMode}
             isEdit={!!formData.id}
+            isAdmin={isAdmin}
           />
         </React.Suspense>
         <React.Suspense fallback={null}>

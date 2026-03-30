@@ -86,8 +86,15 @@ pipeline {
             steps {
                 script {
                     echo "Cleaning up system..."
-                    // Prune dangling images (images that are no longer tagged or used)
+                    def gitCommit = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
+                    
+                    // Prune dangling images (images that are no longer tagged)
                     sh "docker image prune -f || true"
+                    
+                    // Remove older images of this repository, excluding the current commit and 'latest'
+                    sh """
+                    docker images --format '{{.Repository}}:{{.Tag}}' | grep '${REGISTRY}/${IMAGE_REPO}' | grep -v '${gitCommit}' | grep -v 'latest' | xargs -r docker rmi || true
+                    """
                 }
             }
         }
